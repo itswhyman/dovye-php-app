@@ -7,11 +7,11 @@ declare(strict_types=1);
  */
 
 // ---- Veritabanı ----------------------------------------------------------
-define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_HOST', getenv('DB_HOST') ?: 'dovye-mysql'); // Coolify MySQL konteyner adı
 define('DB_PORT', getenv('DB_PORT') ?: '3306');
-define('DB_NAME', getenv('DB_NAME') ?: 'lead_panel');
-define('DB_USER', getenv('DB_USER') ?: 'lead_user');
-define('DB_PASS', getenv('DB_PASS') ?: 'change-this-db-password');
+define('DB_NAME', getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: 'mysql'));
+define('DB_USER', getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: 'mysql'));
+define('DB_PASS', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: 'COOLIFY_MYSQL_SIFRENIZI_YAZIN'));
 
 // ---- Yönetici girişi -----------------------------------------------------
 // Varsayılan kullanıcı: admin  |  varsayılan şifre: ChangeMe!2026  (İLK İŞ DEĞİŞTİRİN)
