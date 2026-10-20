@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':email'   => $old['email'],
                     ':service' => $old['service'],
                     ':message' => $old['message'],
-                    ':ip'      => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45) ?: null,
+                    ':ip'      => substr(client_ip(), 0, 45) ?: null,
                 ]);
 
                 $recent[] = $now;

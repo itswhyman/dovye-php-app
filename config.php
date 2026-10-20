@@ -43,7 +43,9 @@ header('Referrer-Policy: same-origin');
 header("Content-Security-Policy: default-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
 
 // ---- Oturum --------------------------------------------------------------
-$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+// Traefik TLS'i sonlandırır; konteynere HTTP gelir, HTTPS bilgisi X-Forwarded-Proto ile iletilir.
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
@@ -123,4 +125,20 @@ function redirect(string $url): never
 {
     header('Location: ' . $url);
     exit;
+}
+
+/** Ziyaretçi IP'si: proxy (Traefik) arkasında X-Forwarded-For'un ilk geçerli adresi. */
+function client_ip(): string
+{
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $isPrivate = filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+    if ($isPrivate && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        foreach (explode(',', (string) $_SERVER['HTTP_X_FORWARDED_FOR']) as $candidate) {
+            $candidate = trim($candidate);
+            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                return $candidate;
+            }
+        }
+    }
+    return $remote;
 }
