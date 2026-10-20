@@ -16,7 +16,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_name('turkbil_v8_session');
+    session_name('kralagario_v9_session');
     session_start();
 }
 
@@ -42,6 +42,27 @@ function db(): ?PDO
         $failed = true;
         return null;
     }
+}
+
+function get_game_settings(): array {
+    $defaults = [
+        'game_speed' => '1.6',
+        'max_split_cells' => '16',
+        'map_size' => '8000',
+        'remerge_time_sec' => '10',
+        'rgb_speed' => '2'
+    ];
+    $pdo = db();
+    if (!$pdo) return $defaults;
+
+    try {
+        $rows = $pdo->query("SELECT setting_key, setting_value FROM game_settings")->fetchAll();
+        foreach ($rows as $r) {
+            $defaults[$r['setting_key']] = $r['setting_value'];
+        }
+    } catch (Throwable $t) {}
+
+    return $defaults;
 }
 
 function e(?string $v): string {

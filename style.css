@@ -1,4 +1,4 @@
-/* TurkBil Oyun Fuarı v8.0 Enterprise Master CSS Engine */
+/* KralAgario DGRWEB v9.0 Master Cyber CSS Engine */
 
 :root, [data-theme="dark"] {
   --bg-main: #020612;
@@ -48,8 +48,9 @@ body {
   background-color: var(--bg-main);
   color: var(--text-main);
   font-family: 'Plus Jakarta Sans', sans-serif;
-  overflow-x: hidden;
-  min-height: 100vh;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
 }
 
 .cyber-bg-grid {
@@ -62,7 +63,7 @@ body {
   z-index: 0;
 }
 
-/* NICK ENTER MODAL */
+/* START NICK OVERLAY */
 .nick-overlay {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
@@ -76,12 +77,12 @@ body {
 
 .nick-card {
   width: 100%;
-  max-width: 520px;
+  max-width: 540px;
   background: var(--bg-surface);
   border: 2px solid var(--primary-cyan);
   clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
   padding: 2.2rem;
-  box-shadow: 0 0 50px var(--shadow-color);
+  box-shadow: 0 0 60px var(--shadow-color);
   text-align: center;
 }
 
@@ -97,6 +98,29 @@ body {
   margin: 0.6rem 0;
   text-align: center;
   outline: none;
+}
+
+/* GAME OVER MODAL */
+.gameover-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(18, 2, 8, 0.92);
+  backdrop-filter: blur(20px);
+  z-index: 999999;
+  display: none;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.gameover-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-surface);
+  border: 2px solid var(--accent-pink);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+  padding: 2.2rem;
+  box-shadow: 0 0 60px rgba(255, 0, 127, 0.4);
+  text-align: center;
 }
 
 /* FLOATING HEADER */
@@ -116,51 +140,19 @@ body {
 
 .logo-text {
   font-weight: 800;
-  font-size: 1.25rem;
+  font-size: 1.3rem;
   letter-spacing: -0.02em;
 }
 .logo-text span { color: var(--primary-cyan); }
 
-/* GAME GRID MENU */
-.menu-container {
-  max-width: 1350px;
-  margin: 110px auto 4rem;
-  padding: 0 1.5rem;
-  position: relative;
-  z-index: 2;
-}
-
-.games-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.75rem;
-}
-
-.game-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
-  padding: 1.6rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  cursor: pointer;
-}
-.game-card:hover {
-  border-color: var(--primary-cyan);
-  background: var(--bg-card-hover);
-  transform: translateY(-3px);
-}
-
 /* ARENA / CANVAS CONTAINER */
 .arena-wrapper {
-  position: relative;
-  width: 100%;
-  height: calc(100vh - 120px);
+  position: absolute;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
   background: #000;
   overflow: hidden;
-  border: 2px solid var(--primary-cyan);
-  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
 }
 
 #agarioCanvas {
@@ -173,15 +165,15 @@ body {
 /* GLASSMORPHISM MINIMAP (BOTTOM LEFT) */
 .glass-minimap {
   position: absolute;
-  bottom: 20px;
-  left: 20px;
-  width: 200px;
-  height: 200px;
+  bottom: 25px;
+  left: 25px;
+  width: 210px;
+  height: 210px;
   background: rgba(10, 17, 40, 0.85);
   border: 2px solid var(--primary-cyan);
   backdrop-filter: blur(14px);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-  z-index: 10;
+  z-index: 100;
 }
 
 #miniCanvas {
@@ -192,61 +184,42 @@ body {
 /* LIVE LEADERBOARD TOP 10 (TOP RIGHT IN GAME) */
 .live-leaderboard {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 250px;
-  max-height: 380px;
+  top: 85px;
+  right: 25px;
+  width: 260px;
+  max-height: 420px;
   overflow-y: auto;
   background: rgba(10, 17, 40, 0.88);
   border: 2px solid var(--accent-pink);
   backdrop-filter: blur(14px);
   clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   padding: 0.85rem 1rem;
-  z-index: 10;
+  z-index: 100;
   font-family: 'JetBrains Mono', monospace;
 }
 
 .leader-item {
   display: flex;
   justify-content: space-between;
-  font-size: 0.775rem;
+  font-size: 0.8rem;
   margin-top: 0.35rem;
   padding: 0.2rem 0;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.1);
 }
 
-/* CONTROLS GUIDE BAR (ONLY MOUSE, W, SPACE DISPLAYED!) */
+/* CONTROLS GUIDE BAR (ONLY MOUSE, W, SPACE) */
 .controls-guide-bar {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
+  bottom: 25px;
+  right: 25px;
   background: rgba(10, 17, 40, 0.9);
   border: 1px solid var(--primary-cyan);
   padding: 0.65rem 1.2rem;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.8rem;
+  font-size: 0.825rem;
   color: var(--text-main);
   clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-  z-index: 10;
-}
-
-/* MINI-GAME MODAL CANVAS OVERLAY */
-.minigame-modal {
-  position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(2, 6, 18, 0.95);
-  backdrop-filter: blur(20px);
-  z-index: 99999;
-  display: none;
-  place-items: center;
-}
-
-.minigame-box {
-  background: var(--bg-surface);
-  border: 2px solid var(--primary-cyan);
-  padding: 1.5rem;
-  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
-  text-align: center;
+  z-index: 100;
 }
 
 .cyber-btn {

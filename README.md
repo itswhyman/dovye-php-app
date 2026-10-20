@@ -1,2 +1,2 @@
-# TurkBil Oyun Fuarı — DGRWEB.IO Master Agario Platform v8.0
-5 Oyunlu Siber Oyun Fuarı Portalı ve Agario Engine.
+# KRAL AGARİO (DGRWEB Agario Engine v9.0)
+Sadece KralAgario oyununa odaklanmış master web portali.

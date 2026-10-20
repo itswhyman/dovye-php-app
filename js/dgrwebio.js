@@ -1,8 +1,10 @@
-/* TurkBil Oyun Fuarı — DGRWEB.IO Enterprise Master Engine v8.0 */
+/* KralAgario DGRWEB — Master Agario Canvas Engine v9.0 */
 
-let playerNick = 'DGRWEB_Player';
+let cfg = window.GAME_CONFIG || { speed: 1.6, maxSplitCells: 16, mapSize: 8000, remergeSec: 10, rgbSpeed: 2 };
+
+let playerNick = 'DGRWEB_Kral';
 let playerAvatarImg = null;
-let playerSkinPattern = 'rgb';
+let playerSkinPattern = 'rgb_neon';
 
 function handleAvatarUpload(event) {
     const file = event.target.files[0];
@@ -24,17 +26,23 @@ function startPlatform() {
 
     document.getElementById('activeUserBadge').textContent = 'Oyuncu: ' + playerNick;
     document.getElementById('nickOverlay').style.display = 'none';
+
+    initEngine();
+}
+
+function restartGame() {
+    document.getElementById('gameOverOverlay').style.display = 'none';
+    respawnPlayer();
 }
 
 // GAME ENGINE CORE
 let canvas, ctx, miniCanvas, miniCtx;
 let gameRunning = false;
-const MAP_SIZE = 8000;
 
 let mouseX = 0, mouseY = 0;
 let isSprinting = false;
 
-// Cheat Tracker
+// Secret Cheat Counter
 let cPressCount = 0;
 let lastCPressTime = 0;
 
@@ -56,8 +64,8 @@ class Cell {
         this.nick = nick;
         this.vx = 0;
         this.vy = 0;
-        this.remergeTimer = 0;
-        this.virusImmunityTimer = 0; // 20 sec virus eating buff
+        this.createdAt = Date.now();
+        this.virusImmunityTimer = 0; // 20s virus eating immunity buff
     }
 
     get score() {
@@ -67,8 +75,8 @@ class Cell {
 
 class Food {
     constructor() {
-        this.x = Math.random() * (MAP_SIZE - 100) + 50;
-        this.y = Math.random() * (MAP_SIZE - 100) + 50;
+        this.x = Math.random() * (cfg.mapSize - 100) + 50;
+        this.y = Math.random() * (cfg.mapSize - 100) + 50;
         const rand = Math.random();
         if (rand < 0.55) {
             this.type = 'blue'; // 1 pt
@@ -92,20 +100,19 @@ class Food {
 class Virus {
     constructor(x, y) {
         this.id = Math.random().toString();
-        this.x = x || Math.random() * (MAP_SIZE - 200) + 100;
-        this.y = y || Math.random() * (MAP_SIZE - 200) + 100;
-        this.radius = 45;
+        this.x = x || Math.random() * (cfg.mapSize - 200) + 100;
+        this.y = y || Math.random() * (cfg.mapSize - 200) + 100;
+        this.radius = 48;
         this.spikes = 16;
         this.feedCount = 0;
     }
 }
 
-function launchGame(gameKey) {
-    if (gameKey !== 'dgrwebio') return;
+function respawnPlayer() {
+    playerCells = [new Cell('p_' + Math.random(), cfg.mapSize / 2, cfg.mapSize / 2, 22, '#00f2fe', true, playerNick)];
+}
 
-    document.getElementById('menuContainer').style.display = 'none';
-    document.getElementById('arenaContainer').style.display = 'block';
-
+function initEngine() {
     canvas = document.getElementById('agarioCanvas');
     ctx = canvas.getContext('2d');
     miniCanvas = document.getElementById('miniCanvas');
@@ -114,24 +121,23 @@ function launchGame(gameKey) {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Init Player
-    playerCells = [new Cell('player_1', MAP_SIZE / 2, MAP_SIZE / 2, 22, '#00f2fe', true, playerNick)];
+    respawnPlayer();
 
-    // Init Food (1800 pellets in 8000px map)
+    // Food (1800 items)
     foodPellets = [];
     for (let i = 0; i < 1800; i++) foodPellets.push(new Food());
 
-    // Init Red Viruses (45 items)
+    // Viruses (45 items)
     redViruses = [];
     for (let i = 0; i < 45; i++) redViruses.push(new Virus());
 
-    // Init Active Bot Competitors (30 Bots with multi-cells)
+    // Active Bot Competitors (35 Bots)
     botPlayers = [];
-    const botNames = ['CyberBot_Alpha', 'NeoMatrix_99', 'SiberWolf', 'TitanGamer', 'ShadowHunter', 'VortexPro', 'QuantumGamer', 'ZeroCool'];
-    for (let i = 0; i < 30; i++) {
+    const botNames = ['CyberBot_Alpha', 'NeoMatrix_99', 'SiberWolf', 'TitanGamer', 'ShadowHunter', 'VortexPro', 'QuantumGamer', 'ZeroCool', 'ApexPredator', 'MegaByte'];
+    for (let i = 0; i < 35; i++) {
         const name = botNames[i % botNames.length] + '_' + (i + 1);
-        const radius = Math.floor(Math.random() * 50) + 18;
-        botPlayers.push(new Cell('bot_' + i, Math.random() * MAP_SIZE, Math.random() * MAP_SIZE, radius, '#ff007f', false, name));
+        const radius = Math.floor(Math.random() * 55) + 18;
+        botPlayers.push(new Cell('bot_' + i, Math.random() * cfg.mapSize, Math.random() * cfg.mapSize, radius, '#ff007f', false, name));
     }
 
     gameRunning = true;
@@ -153,24 +159,30 @@ function launchGame(gameKey) {
 function handleKeyControls(e) {
     const key = e.key.toLowerCase();
 
-    // SPACE: Split in half
+    // SPACE: Split in half & SHOOT FAR (Distance = 2x Radius of split piece)
     if (e.code === 'Space') {
-        let newCells = [];
-        playerCells.forEach(cell => {
-            if (cell.radius >= 22) {
-                cell.radius /= 1.414;
-                let angle = Math.atan2(mouseY - canvas.height / 2, mouseX - canvas.width / 2);
-                let splitCell = new Cell('p_' + Math.random(), cell.x, cell.y, cell.radius, cell.color, true, cell.nick);
-                splitCell.vx = Math.cos(angle) * 22;
-                splitCell.vy = Math.sin(angle) * 22;
-                splitCell.remergeTimer = 350;
-                newCells.push(splitCell);
-            }
-        });
-        playerCells.push(...newCells);
+        if (playerCells.length < cfg.maxSplitCells) {
+            let newCells = [];
+            playerCells.forEach(cell => {
+                if (cell.radius >= 22 && playerCells.length + newCells.length < cfg.maxSplitCells) {
+                    cell.radius /= 1.414;
+                    let angle = Math.atan2(mouseY - canvas.height / 2, mouseX - canvas.width / 2);
+                    
+                    let splitCell = new Cell('p_' + Math.random(), cell.x, cell.y, cell.radius, cell.color, true, cell.nick);
+                    
+                    // Throw distance = 2x new radius (Velocity pulse)
+                    let throwVelocity = (cell.radius * 2.0) / 3.0;
+                    splitCell.vx = Math.cos(angle) * throwVelocity;
+                    splitCell.vy = Math.sin(angle) * throwVelocity;
+
+                    newCells.push(splitCell);
+                }
+            });
+            playerCells.push(...newCells);
+        }
     }
 
-    // W: Eject Food with Velocity towards Cursor!
+    // W: Eject Food with Velocity
     if (key === 'w') {
         playerCells.forEach(cell => {
             if (cell.radius > 16) {
@@ -179,8 +191,8 @@ function handleKeyControls(e) {
                 ejectedFoods.push({
                     x: cell.x + Math.cos(angle) * (cell.radius + 10),
                     y: cell.y + Math.sin(angle) * (cell.radius + 10),
-                    vx: Math.cos(angle) * 16,
-                    vy: Math.sin(angle) * 16,
+                    vx: Math.cos(angle) * 18,
+                    vy: Math.sin(angle) * 18,
                     radius: 7,
                     points: 2,
                     color: '#f59e0b'
@@ -196,14 +208,14 @@ function handleKeyControls(e) {
             fireballs.push({
                 x: playerCells[0].x + Math.cos(angle) * (playerCells[0].radius + 10),
                 y: playerCells[0].y + Math.sin(angle) * (playerCells[0].radius + 10),
-                vx: Math.cos(angle) * 24,
-                vy: Math.sin(angle) * 24,
+                vx: Math.cos(angle) * 25,
+                vy: Math.sin(angle) * 25,
                 radius: 12
             });
         }
     }
 
-    // SECRET KEY B: Sprint Hold (Burns 10 pt per sec)
+    // SECRET KEY B: Sprint Hold
     if (key === 'b') {
         isSprinting = true;
     }
@@ -218,24 +230,23 @@ function handleKeyControls(e) {
         }
         lastCPressTime = now;
 
-        // Check if player is near map corners
         let nearCorner = playerCells.some(cell => {
             let margin = 200;
             let left = cell.x < margin;
-            let right = cell.x > MAP_SIZE - margin;
+            let right = cell.x > cfg.mapSize - margin;
             let top = cell.y < margin;
-            let bottom = cell.y > MAP_SIZE - margin;
+            let bottom = cell.y > cfg.mapSize - margin;
             return (left || right) && (top || bottom);
         });
 
         if (cPressCount >= 3) {
             if (nearCorner) {
                 playerCells.forEach(cell => {
-                    cell.radius *= 1.732; // Triples mass/area (score x3)
+                    cell.radius *= 1.732; // Triples mass/area
                 });
                 alert('💥 GİZLİ HİLE AKTİF! Köşede 3x "ccc" basıldı, skorunuz 3 Katına Çıktı!');
             } else {
-                // Regular Instant Merge
+                // Instant Merge
                 if (playerCells.length > 1) {
                     let totalArea = 0;
                     playerCells.forEach(c => totalArea += c.radius * c.radius);
@@ -250,8 +261,8 @@ function handleKeyControls(e) {
 
 function resizeCanvas() {
     if (!canvas) return;
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
 
 let lastSprintBurn = 0;
@@ -260,52 +271,59 @@ let rgbHue = 0;
 function gameLoop(time) {
     if (!gameRunning) return;
 
-    rgbHue = (rgbHue + 1) % 360;
+    rgbHue = (rgbHue + cfg.rgbSpeed) % 360;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Camera Center of Mass
-    let avgX = 0, avgY = 0, totalR = 0;
+    // Calculate Total Score & Center of Mass
+    let totalScore = 0;
+    let avgX = 0, avgY = 0;
     playerCells.forEach(c => {
+        totalScore += c.score;
         avgX += c.x;
         avgY += c.y;
-        totalR += c.radius;
     });
+
     if (playerCells.length === 0) {
-        // Respawn if eaten
-        playerCells = [new Cell('player_respawn', MAP_SIZE / 2, MAP_SIZE / 2, 22, '#00f2fe', true, playerNick)];
-        avgX = MAP_SIZE / 2; avgY = MAP_SIZE / 2; totalR = 22;
-    } else {
-        avgX /= playerCells.length;
-        avgY /= playerCells.length;
+        // Player completely eaten -> Trigger Game Over screen!
+        document.getElementById('finalScoreText').textContent = totalScore;
+        document.getElementById('gameOverOverlay').style.display = 'grid';
+        gameRunning = false;
+        return;
     }
 
-    let scale = Math.max(0.3, Math.min(1.2, 35 / (totalR + 10)));
-    
+    avgX /= playerCells.length;
+    avgY /= playerCells.length;
+
+    // DYNAMIC ZOOM SCALING: Strictly proportional to current total score!
+    // As score drops when losing pieces, zoom level zooms back in!
+    let targetScale = 1.0 / (1.0 + Math.pow(totalScore / 400.0, 0.42));
+    let scale = Math.max(0.25, Math.min(1.2, targetScale));
+
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.scale(scale, scale);
     ctx.translate(-avgX, -avgY);
 
-    // Draw Grid Lines & Coordinates
+    // Grid Lines
     ctx.strokeStyle = 'rgba(0, 242, 254, 0.08)';
     ctx.lineWidth = 1;
-    for (let x = 0; x <= MAP_SIZE; x += 150) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); ctx.stroke();
+    for (let x = 0; x <= cfg.mapSize; x += 150) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cfg.mapSize); ctx.stroke();
     }
-    for (let y = 0; y <= MAP_SIZE; y += 150) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
+    for (let y = 0; y <= cfg.mapSize; y += 150) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cfg.mapSize, y); ctx.stroke();
     }
 
     // Border
     ctx.strokeStyle = '#00f2fe';
     ctx.lineWidth = 8;
-    ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
+    ctx.strokeRect(0, 0, cfg.mapSize, cfg.mapSize);
 
-    // Sprint Logic (B key burns 10 mass per second)
-    let speedMult = 1.0;
+    // Sprint Logic
+    let speedMult = cfg.speed;
     if (isSprinting && time - lastSprintBurn > 500) {
-        speedMult = 2.2;
+        speedMult = cfg.speed * 2.2;
         playerCells.forEach(c => {
             if (c.radius > 16) c.radius = Math.max(12, Math.sqrt(c.radius * c.radius - 10));
         });
@@ -321,23 +339,48 @@ function gameLoop(time) {
         let dy = targetY - c.y;
         let dist = Math.hypot(dx, dy);
 
-        let baseSpeed = Math.max(2.5, (90 / c.radius)) * speedMult;
+        let baseSpeed = Math.max(2.5, (100 / c.radius)) * speedMult;
         if (dist > 5) {
             c.x += (dx / dist) * baseSpeed + c.vx;
             c.y += (dy / dist) * baseSpeed + c.vy;
         }
 
-        c.vx *= 0.92;
-        c.vy *= 0.92;
+        c.vx *= 0.88;
+        c.vy *= 0.88;
 
-        c.x = Math.max(c.radius, Math.min(MAP_SIZE - c.radius, c.x));
-        c.y = Math.max(c.radius, Math.min(MAP_SIZE - c.radius, c.y));
+        c.x = Math.max(c.radius, Math.min(cfg.mapSize - c.radius, c.x));
+        c.y = Math.max(c.radius, Math.min(cfg.mapSize - c.radius, c.y));
 
-        if (c.remergeTimer > 0) c.remergeTimer--;
         if (c.virusImmunityTimer > 0) c.virusImmunityTimer--;
     });
 
-    // Draw Static Food Pellets
+    // SELF-REMERGE AFTER 10 SECONDS (Own bigger cell eats own smaller cell)
+    const now = Date.now();
+    for (let i = 0; i < playerCells.length; i++) {
+        for (let j = i + 1; j < playerCells.length; j++) {
+            let c1 = playerCells[i];
+            let c2 = playerCells[j];
+            let age1 = (now - c1.createdAt) / 1000;
+            let age2 = (now - c2.createdAt) / 1000;
+
+            if (age1 >= cfg.remergeSec || age2 >= cfg.remergeSec) {
+                let dist = Math.hypot(c1.x - c2.x, c1.y - c2.y);
+                if (dist < c1.radius + c2.radius) {
+                    if (c1.radius >= c2.radius) {
+                        c1.radius = Math.sqrt(c1.radius * c1.radius + c2.radius * c2.radius);
+                        playerCells.splice(j, 1);
+                        j--;
+                    } else {
+                        c2.radius = Math.sqrt(c1.radius * c1.radius + c2.radius * c2.radius);
+                        playerCells.splice(i, 1);
+                        i--; break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Draw Food
     foodPellets.forEach(f => {
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
@@ -357,18 +400,16 @@ function gameLoop(time) {
         ctx.fillStyle = ef.color;
         ctx.fill();
 
-        // Check Collision with Viruses (Virus Feeding)
         redViruses.forEach((v, vIdx) => {
             if (Math.hypot(v.x - ef.x, v.y - ef.y) < v.radius) {
                 v.feedCount++;
                 v.radius += 1.5;
                 ejectedFoods.splice(idx, 1);
 
-                // If fed enough, virus splits/spawns a new virus!
                 if (v.feedCount >= 6) {
                     redViruses.push(new Virus(v.x + 80, v.y + 80));
                     v.feedCount = 0;
-                    v.radius = 45;
+                    v.radius = 48;
                 }
             }
         });
@@ -393,7 +434,7 @@ function gameLoop(time) {
         ctx.restore();
     });
 
-    // Move & Draw Fireballs
+    // Fireballs
     fireballs.forEach((fb, idx) => {
         fb.x += fb.vx;
         fb.y += fb.vy;
@@ -406,8 +447,7 @@ function gameLoop(time) {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Hit Bot -> Splits Bot!
-        botPlayers.forEach((bot, bIdx) => {
+        botPlayers.forEach((bot) => {
             if (Math.hypot(bot.x - fb.x, bot.y - fb.y) < bot.radius + fb.radius) {
                 bot.radius /= 1.414;
                 botPlayers.push(new Cell('bot_' + Math.random(), bot.x + 35, bot.y + 35, bot.radius, '#ff007f', false, bot.nick + '_split'));
@@ -416,25 +456,29 @@ function gameLoop(time) {
         });
     });
 
-    // Move & Draw Bots
+    // Move & Draw Bots with REAL EXACT SIZES
     botPlayers.forEach(bot => {
         bot.x += (Math.random() - 0.5) * 4;
         bot.y += (Math.random() - 0.5) * 4;
-        bot.x = Math.max(bot.radius, Math.min(MAP_SIZE - bot.radius, bot.x));
-        bot.y = Math.max(bot.radius, Math.min(MAP_SIZE - bot.radius, bot.y));
+        bot.x = Math.max(bot.radius, Math.min(cfg.mapSize - bot.radius, bot.x));
+        bot.y = Math.max(bot.radius, Math.min(cfg.mapSize - bot.radius, bot.y));
 
         ctx.beginPath();
         ctx.arc(bot.x, bot.y, bot.radius, 0, Math.PI * 2);
         ctx.fillStyle = bot.color;
         ctx.fill();
 
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px Plus Jakarta Sans';
+        ctx.font = 'bold ' + Math.max(12, bot.radius / 2.5) + 'px Plus Jakarta Sans';
         ctx.textAlign = 'center';
         ctx.fillText(bot.nick, bot.x, bot.y + 4);
     });
 
-    // Draw Player Cells (RGB Gradient / Skin / Custom Photo)
+    // Draw Player Cells
     playerCells.forEach(c => {
         ctx.save();
         ctx.beginPath();
@@ -444,12 +488,12 @@ function gameLoop(time) {
         if (playerAvatarImg) {
             ctx.drawImage(playerAvatarImg, c.x - c.radius, c.y - c.radius, c.radius * 2, c.radius * 2);
         } else {
-            if (playerSkinPattern === 'rgb') {
+            if (playerSkinPattern.startsWith('rgb')) {
                 let grad = ctx.createRadialGradient(c.x, c.y, 5, c.x, c.y, c.radius);
                 grad.addColorStop(0, `hsl(${rgbHue}, 100%, 60%)`);
-                grad.addColorStop(1, `hsl(${(rgbHue + 60) % 360}, 100%, 40%)`);
+                grad.addColorStop(1, `hsl(${(rgbHue + 80) % 360}, 100%, 40%)`);
                 ctx.fillStyle = grad;
-            } else if (playerSkinPattern === 'gold') {
+            } else if (playerSkinPattern === 'gold_cyber') {
                 ctx.fillStyle = '#f59e0b';
             } else {
                 ctx.fillStyle = c.color;
@@ -458,14 +502,12 @@ function gameLoop(time) {
         }
         ctx.restore();
 
-        // Stroke Border (Glows if Virus Immunity Buff is Active)
         ctx.beginPath();
         ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
         ctx.strokeStyle = c.virusImmunityTimer > 0 ? '#00f5a0' : '#ffffff';
         ctx.lineWidth = c.virusImmunityTimer > 0 ? 5 : 3;
         ctx.stroke();
 
-        // Nick Label & Score
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold ' + Math.max(12, c.radius / 2.5) + 'px Plus Jakarta Sans';
         ctx.textAlign = 'center';
@@ -475,15 +517,15 @@ function gameLoop(time) {
     });
 
     // --------------------------------------------------
-    // COLLISION & EATING ALGORITHMS
+    // COLLISIONS & PIECE STEALING
     // --------------------------------------------------
 
-    // 1. Player eats Food Pellets & Ejected Foods
+    // 1. Eat Food
     playerCells.forEach(c => {
         foodPellets.forEach((f, idx) => {
             if (Math.hypot(c.x - f.x, c.y - f.y) < c.radius + f.radius) {
                 c.radius += f.points * 0.16;
-                foodPellets[idx] = new Food(); // Respawn
+                foodPellets[idx] = new Food();
             }
         });
 
@@ -494,51 +536,55 @@ function gameLoop(time) {
             }
         });
 
-        // 2. Player vs Virus (Pop or 20s Immunity Eating!)
+        // 2. Virus Collision (Pop or 20s Immunity Eating)
         redViruses.forEach((v, vIdx) => {
             if (Math.hypot(c.x - v.x, c.y - v.y) < c.radius) {
                 if (c.virusImmunityTimer > 0 && c.radius > v.radius) {
-                    // EAT VIRUS FOR POINTS (20s Buff Active!)
-                    c.radius += 12;
-                    redViruses[vIdx] = new Virus(); // Respawn
+                    c.radius += 14;
+                    redViruses[vIdx] = new Virus();
                 } else if (c.radius > v.radius) {
-                    // Pop into pieces & Grant 20s Immunity Buff!
                     c.radius /= 1.5;
-                    c.virusImmunityTimer = 1200; // 20s at 60fps
+                    c.virusImmunityTimer = 1200;
                     for (let k = 0; k < 3; k++) {
-                        let split = new Cell('p_' + Math.random(), c.x + (Math.random() - 0.5) * 60, c.y + (Math.random() - 0.5) * 60, c.radius, c.color, true, c.nick);
-                        split.remergeTimer = 400;
-                        split.virusImmunityTimer = 1200;
-                        playerCells.push(split);
+                        if (playerCells.length < cfg.maxSplitCells) {
+                            let split = new Cell('p_' + Math.random(), c.x + (Math.random() - 0.5) * 60, c.y + (Math.random() - 0.5) * 60, c.radius, c.color, true, c.nick);
+                            split.virusImmunityTimer = 1200;
+                            playerCells.push(split);
+                        }
                     }
                 }
             }
         });
     });
 
-    // 3. CELL VS CELL EATING (Player vs Bot, Cell vs Cell Stealing!)
-    playerCells.forEach((pc, pIdx) => {
-        botPlayers.forEach((bot, bIdx) => {
+    // 3. CELL VS CELL EATING (PIECE-BASED STEALING)
+    for (let pIdx = playerCells.length - 1; pIdx >= 0; pIdx--) {
+        let pc = playerCells[pIdx];
+        if (!pc) continue;
+
+        for (let bIdx = botPlayers.length - 1; bIdx >= 0; bIdx--) {
+            let bot = botPlayers[bIdx];
             let dist = Math.hypot(pc.x - bot.x, pc.y - bot.y);
 
-            // Player eats Bot cell!
+            // Player piece eats Bot piece
             if (pc.radius > bot.radius * 1.1 && dist < pc.radius) {
                 pc.radius = Math.sqrt(pc.radius * pc.radius + bot.radius * bot.radius);
                 botPlayers.splice(bIdx, 1);
-                // Respawn new bot
-                botPlayers.push(new Cell('bot_' + Math.random(), Math.random() * MAP_SIZE, Math.random() * MAP_SIZE, 20, '#ff007f', false, 'RespawnBot_' + Math.floor(Math.random() * 100)));
+                botPlayers.push(new Cell('bot_' + Math.random(), Math.random() * cfg.mapSize, Math.random() * cfg.mapSize, 20, '#ff007f', false, 'RespawnBot_' + Math.floor(Math.random() * 100)));
             }
 
-            // Bot eats Player cell!
-            if (bot.radius > pc.radius * 1.1 && dist < bot.radius) {
+            // Bot piece eats Player piece
+            else if (bot.radius > pc.radius * 1.1 && dist < bot.radius) {
                 bot.radius = Math.sqrt(bot.radius * bot.radius + pc.radius * pc.radius);
                 playerCells.splice(pIdx, 1);
+                break;
             }
-        });
-    });
+        }
+    }
 
     ctx.restore();
 
+    // Render Minimap with Proportionally Scaled Dots
     renderMinimap(avgX, avgY);
     updateLeaderboard();
 
@@ -546,20 +592,24 @@ function gameLoop(time) {
 }
 
 function renderMinimap(playerX, playerY) {
-    miniCtx.clearRect(0, 0, 200, 200);
-    let scale = 200 / MAP_SIZE;
+    miniCtx.clearRect(0, 0, 210, 210);
+    let miniScale = 210 / cfg.mapSize;
 
-    // Player Dot
+    // Draw Player Dots scaled to size
     miniCtx.fillStyle = '#00f2fe';
-    miniCtx.beginPath();
-    miniCtx.arc(playerX * scale, playerY * scale, 5, 0, Math.PI * 2);
-    miniCtx.fill();
+    playerCells.forEach(c => {
+        let miniR = Math.max(3, Math.min(20, c.radius * miniScale));
+        miniCtx.beginPath();
+        miniCtx.arc(c.x * miniScale, c.y * miniScale, miniR, 0, Math.PI * 2);
+        miniCtx.fill();
+    });
 
-    // Bots Dots
+    // Draw Bots Dots scaled to size
     miniCtx.fillStyle = '#ff007f';
     botPlayers.forEach(b => {
+        let miniR = Math.max(2, Math.min(18, b.radius * miniScale));
         miniCtx.beginPath();
-        miniCtx.arc(b.x * scale, b.y * scale, 3, 0, Math.PI * 2);
+        miniCtx.arc(b.x * miniScale, b.y * miniScale, miniR, 0, Math.PI * 2);
         miniCtx.fill();
     });
 }
@@ -582,196 +632,4 @@ function updateLeaderboard() {
     });
 
     document.getElementById('leaderList').innerHTML = html;
-}
-
-// --------------------------------------------------
-// MINI-GAMES EMBEDDED ENGINE (Snake, Flappy, Pong, Brick Breaker)
-// --------------------------------------------------
-
-function openMiniGameModal(type) {
-    const modal = document.getElementById('miniGameModal');
-    const title = document.getElementById('miniGameTitle');
-    const canvas = document.getElementById('miniGameCanvas');
-    const scoreText = document.getElementById('miniGameScoreText');
-
-    modal.style.display = 'grid';
-
-    if (type === 'snake') {
-        title.textContent = 'Cyber Snake 2077';
-        startSnakeGame(canvas, scoreText);
-    } else if (type === 'flappy') {
-        title.textContent = 'Flappy Blob Arcadius';
-        startFlappyGame(canvas, scoreText);
-    } else if (type === 'pong') {
-        title.textContent = 'Neon Pong vs AI';
-        startPongGame(canvas, scoreText);
-    } else if (type === 'breaker') {
-        title.textContent = 'Cyber Brick Breaker';
-        startBreakerGame(canvas, scoreText);
-    }
-}
-
-function closeMiniGameModal() {
-    document.getElementById('miniGameModal').style.display = 'none';
-}
-
-// Snake Mini-Game
-function startSnakeGame(canvas, scoreText) {
-    const ctx = canvas.getContext('2d');
-    let snake = [{x: 10, y: 10}];
-    let food = {x: 15, y: 15};
-    let dx = 1, dy = 0;
-    let score = 0;
-
-    function gameStep() {
-        let head = {x: snake[0].x + dx, y: snake[0].y + dy};
-        snake.unshift(head);
-
-        if (head.x === food.x && head.y === food.y) {
-            score += 10;
-            scoreText.textContent = 'Skor: ' + score;
-            food = {x: Math.floor(Math.random() * 28), y: Math.floor(Math.random() * 18)};
-        } else {
-            snake.pop();
-        }
-
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = '#00f2fe';
-        snake.forEach(s => ctx.fillRect(s.x * 20, s.y * 20, 18, 18));
-
-        ctx.fillStyle = '#ff007f';
-        ctx.fillRect(food.x * 20, food.y * 20, 18, 18);
-    }
-
-    window.onkeydown = (e) => {
-        if (e.key === 'ArrowUp' && dy === 0) { dx = 0; dy = -1; }
-        if (e.key === 'ArrowDown' && dy === 0) { dx = 0; dy = 1; }
-        if (e.key === 'ArrowLeft' && dx === 0) { dx = -1; dy = 0; }
-        if (e.key === 'ArrowRight' && dx === 0) { dx = 1; dy = 0; }
-    };
-
-    let timer = setInterval(() => {
-        if (document.getElementById('miniGameModal').style.display === 'none') {
-            clearInterval(timer); return;
-        }
-        gameStep();
-    }, 100);
-}
-
-// Flappy Mini-Game
-function startFlappyGame(canvas, scoreText) {
-    const ctx = canvas.getContext('2d');
-    let birdY = 200, velocity = 0, score = 0;
-    let pipes = [];
-
-    canvas.onclick = () => { velocity = -7; };
-
-    let timer = setInterval(() => {
-        if (document.getElementById('miniGameModal').style.display === 'none') {
-            clearInterval(timer); return;
-        }
-
-        velocity += 0.4;
-        birdY += velocity;
-
-        if (Math.random() < 0.03) {
-            pipes.push({x: 600, top: Math.random() * 200 + 50});
-        }
-
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = '#00f2fe';
-        ctx.beginPath(); ctx.arc(100, birdY, 12, 0, Math.PI * 2); ctx.fill();
-
-        pipes.forEach((p, idx) => {
-            p.x -= 3;
-            ctx.fillStyle = '#00f5a0';
-            ctx.fillRect(p.x, 0, 30, p.top);
-            ctx.fillRect(p.x, p.top + 100, 30, 400);
-
-            if (p.x === 100) { score += 10; scoreText.textContent = 'Skor: ' + score; }
-        });
-    }, 20);
-}
-
-// Pong Mini-Game
-function startPongGame(canvas, scoreText) {
-    const ctx = canvas.getContext('2d');
-    let ballX = 300, ballY = 200, bx = 4, by = 4;
-    let p1Y = 150, p2Y = 150, score = 0;
-
-    canvas.onmousemove = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        p1Y = e.clientY - rect.top - 40;
-    };
-
-    let timer = setInterval(() => {
-        if (document.getElementById('miniGameModal').style.display === 'none') {
-            clearInterval(timer); return;
-        }
-
-        ballX += bx; ballY += by;
-        p2Y += (ballY - (p2Y + 40)) * 0.1;
-
-        if (ballY < 0 || ballY > 400) by *= -1;
-
-        if (ballX < 20 && ballY > p1Y && ballY < p1Y + 80) { bx *= -1; score += 5; scoreText.textContent = 'Skor: ' + score; }
-        if (ballX > 580 && ballY > p2Y && ballY < p2Y + 80) bx *= -1;
-
-        if (ballX < 0 || ballX > 600) { ballX = 300; ballY = 200; }
-
-        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#00f2fe'; ctx.fillRect(10, p1Y, 10, 80);
-        ctx.fillStyle = '#ff007f'; ctx.fillRect(580, p2Y, 10, 80);
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ballX, ballY, 8, 0, Math.PI * 2); ctx.fill();
-    }, 16);
-}
-
-// Brick Breaker Mini-Game
-function startBreakerGame(canvas, scoreText) {
-    const ctx = canvas.getContext('2d');
-    let paddleX = 250, ballX = 300, ballY = 300, dx = 3, dy = -3, score = 0;
-    let bricks = [];
-
-    for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 8; c++) {
-            bricks.push({x: c * 70 + 20, y: r * 25 + 30, active: true});
-        }
-    }
-
-    canvas.onmousemove = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        paddleX = e.clientX - rect.left - 50;
-    };
-
-    let timer = setInterval(() => {
-        if (document.getElementById('miniGameModal').style.display === 'none') {
-            clearInterval(timer); return;
-        }
-
-        ballX += dx; ballY += dy;
-        if (ballX < 0 || ballX > 600) dx *= -1;
-        if (ballY < 0) dy *= -1;
-
-        if (ballY > 370 && ballX > paddleX && ballX < paddleX + 100) dy *= -1;
-
-        bricks.forEach(b => {
-            if (b.active && ballX > b.x && ballX < b.x + 60 && ballY > b.y && ballY < b.y + 20) {
-                b.active = false; dy *= -1; score += 20; scoreText.textContent = 'Skor: ' + score;
-            }
-        });
-
-        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#00f2fe'; ctx.fillRect(paddleX, 380, 100, 12);
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ballX, ballY, 7, 0, Math.PI * 2); ctx.fill();
-
-        bricks.forEach(b => {
-            if (b.active) {
-                ctx.fillStyle = '#f59e0b'; ctx.fillRect(b.x, b.y, 60, 20);
-            }
-        });
-    }, 16);
 }
