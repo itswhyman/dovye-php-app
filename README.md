@@ -1,3 +1,3 @@
-# DOVYE STUDIO — Mega Cyber OS v4.0
+# DOVYE STUDIO — Mega Cyber OS v5.0
 
-Baklava kesim floating navbar, YouTube Theatre (100vh), Skyline & Live Cams, Hava/Döviz/Hosting/Arcade modülleri ve Açık/Koyu tema değiştiricili mega altyapı.
+Tek yerellik ilkesiyle ayrılmış 100vh sayfalar, dikey dış oynatıcı kontrolleri, tatlı siber kedi widget'ı, tema düzeltmeleri ve otomatik veritabanı migrasyonu.

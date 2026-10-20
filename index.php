@@ -5,7 +5,6 @@ require __DIR__ . '/config.php';
 
 $pdo = db();
 
-// Fetch YouTube Videos
 $videos = [];
 if ($pdo) {
     try {
@@ -13,7 +12,6 @@ if ($pdo) {
     } catch (Throwable $t) {}
 }
 
-// Fetch Live Cameras
 $liveCams = [];
 if ($pdo) {
     try {
@@ -22,14 +20,14 @@ if ($pdo) {
 }
 
 $firstVideoId = $videos[0]['video_id'] ?? 'Leed38_x0_0';
-$firstVideoTitle = $videos[0]['title'] ?? 'Cyberpunk 2077 — Night City 4K Ambience';
+$firstVideoTitle = $videos[0]['title'] ?? 'Cyberpunk 2077 — Night City Ambient Drive 4K';
 ?>
 <!DOCTYPE html>
 <html lang="tr" data-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>DOVYE STUDIO — Mega Cyber Portal v4.0</title>
+    <title>DOVYE STUDIO — Mega Cyber Portal v5.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -42,216 +40,268 @@ $firstVideoTitle = $videos[0]['title'] ?? 'Cyberpunk 2077 — Night City 4K Ambi
 <div class="ambient-orb orb-1"></div>
 <div class="ambient-orb orb-2"></div>
 
-<!-- UNUSUAL BAKLAVA FLOATING NAVBAR (Floating top-left, polygon cuts) -->
+<!-- UNUSUAL FLOATING BAKLAVA NAVBAR (Sticky, Smooth Tracking) -->
 <nav class="floating-baklava-nav">
     <div class="baklava-brand">
         <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
         <span>DOVYE</span>.STUDIO
     </div>
     <div class="baklava-menu">
-        <a href="#youtube-theatre" class="baklava-link active">YouTube Hub</a>
-        <a href="#live-cameras" class="baklava-link">Canlı Kameralar</a>
-        <a href="#weather-exchange" class="baklava-link">Hava & Döviz</a>
-        <a href="#hosting-data" class="baklava-link">Data Center</a>
-        <a href="#arcade-zone" class="baklava-link">Cyber Arcade</a>
+        <a href="#page-youtube" class="baklava-link active">1. YouTube Theatre</a>
+        <a href="#page-cams" class="baklava-link">2. Canlı Kameralar</a>
+        <a href="#page-weather" class="baklava-link">3. Hava Durumu</a>
+        <a href="#page-currency" class="baklava-link">4. Döviz & Piyasa</a>
+        <a href="#page-hosting" class="baklava-link">5. Data Center</a>
+        <a href="#page-arcade" class="baklava-link">6. Cyber Arcade</a>
         
         <button type="button" class="theme-toggle-btn" id="themeToggleBtn">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             <span id="themeBtnText">Tema</span>
         </button>
 
-        <a href="admin.php" class="cyber-btn btn-cyan btn-sm" target="_blank">Admin Panel →</a>
+        <a href="admin.php" class="cyber-btn btn-cyan btn-sm" target="_blank">Admin OS →</a>
     </div>
 </nav>
 
-<div class="mega-container">
+<!-- PERSISTENT CUTE CYBER CAT WIDGET (TOP-RIGHT) -->
+<div class="cyber-cat-widget" id="cyberCatWidget">
+    <div class="cat-avatar">🐱</div>
+    <div class="cat-speech" id="catSpeechText">Miyav! DOVYE Studio'ya hoşgeldin!</div>
+</div>
 
-    <!-- PAGE 1 / MODULE 1: YOUTUBE THEATRE VIEW (Full Screen 100vh Layout) -->
-    <section class="youtube-theatre-section" id="youtube-theatre">
-        <div class="section-title-box">
-            <div>
-                <h2>YouTube Theatre & Video Player Hub</h2>
-                <p style="color:var(--text-muted); font-size:0.875rem;">Solda seçilen ana video oynatılır, sağda tüm playlist sıralanır.</p>
-            </div>
-            <span class="section-tag">FULL SCREEN THEATRE MODE</span>
+<!-- PAGE 1: YOUTUBE THEATRE & CUSTOM OUTSIDE CONTROLS (100vh Full Page) -->
+<section class="full-page-section" id="page-youtube">
+    <div class="section-header-bar">
+        <div>
+            <h2>1. YouTube Theatre & External Control Hub</h2>
+            <p style="color:var(--text-muted); font-size:0.875rem;">Solda dikey kontrol barları, ortada geniş video oynatıcısı, sağda sıralı playlist.</p>
+        </div>
+        <span class="section-tag">FULL SCREEN THEATRE MODE</span>
+    </div>
+
+    <div class="custom-theatre-layout">
+        <!-- Outside Vertical Control Bar -->
+        <div class="vertical-control-bar">
+            <button type="button" class="v-btn" title="Oynat / Durdur" onclick="togglePlayPause()">⏯</button>
+            <button type="button" class="v-btn" title="Sesi Kapat / Aç" onclick="toggleMute()">🔇</button>
+            <button type="button" class="v-btn" title="Yeniden Başlat" onclick="restartVideo()">🔄</button>
+            <button type="button" class="v-btn" title="HD Kalite" onclick="setHD()">4K</button>
         </div>
 
-        <div class="theatre-layout">
-            <div class="main-player-box">
-                <div class="video-screen">
-                    <iframe id="mainYoutubeFrame" src="https://www.youtube.com/embed/<?= e($firstVideoId) ?>?autoplay=0" allowfullscreen></iframe>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3 id="mainVideoTitle" style="font-size:1.15rem;"><?= e($firstVideoTitle) ?></h3>
-                    <span style="font-family:'JetBrains Mono',monospace; color:var(--primary-cyan); font-size:0.8rem;">4K ULTRA HD STREAM</span>
-                </div>
+        <!-- Main Video Screen -->
+        <div>
+            <div class="video-screen-box">
+                <iframe id="mainYoutubeFrame" src="https://www.youtube.com/embed/<?= e($firstVideoId) ?>?enablejsapi=1&autoplay=0" allowfullscreen></iframe>
             </div>
-
-            <div class="playlist-sidebar">
-                <h4 style="font-size:0.9rem; margin-bottom:0.5rem; text-transform:uppercase; color:var(--text-muted);">Videolar (<?= count($videos) ?>)</h4>
-                <?php foreach ($videos as $idx => $v): ?>
-                    <div class="playlist-item <?= $idx === 0 ? 'active' : '' ?>" onclick="switchVideo('<?= e($v['video_id']) ?>', '<?= e(addslashes($v['title'])) ?>', this)">
-                        <div class="mini-thumb" style="background-image: url('https://img.youtube.com/vi/<?= e($v['video_id']) ?>/mqdefault.jpg');"></div>
-                        <div class="mini-info">
-                            <div class="mini-title"><?= e($v['title']) ?></div>
-                            <span class="mini-cat"><?= e($v['category']) ?> • <?= number_format((int)$v['views_count']) ?> views</span>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem;">
+                <h3 id="mainVideoTitle" style="font-size:1.2rem;"><?= e($firstVideoTitle) ?></h3>
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--primary-cyan); font-weight:700;">4K ULTRA HD STREAM</span>
             </div>
         </div>
-    </section>
 
-    <!-- PAGE 2 / MODULE 2: LIVE WORLD CAMS (SkylineWebcams & YouTube Live Embeds) -->
-    <section id="live-cameras">
-        <div class="section-title-box">
-            <div>
-                <h2>Dünya Canlı Kameralar (Skyline & Live Streams)</h2>
-                <p style="color:var(--text-muted); font-size:0.875rem;">Milano Duomo, Tokyo Shibuya, Times Square ve canlı dünya kameraları.</p>
-            </div>
-            <span class="section-tag">LIVE WORLD TELEMETRY</span>
-        </div>
-
-        <div class="cams-grid">
-            <?php foreach ($liveCams as $cam): ?>
-                <div class="cam-card">
-                    <div class="cam-viewport">
-                        <iframe src="<?= e($cam['embed_url']) ?>" allowfullscreen></iframe>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <strong style="display:block; font-size:0.95rem;"><?= e($cam['title']) ?></strong>
-                            <small style="color:var(--text-muted); font-size:0.775rem;"><?= e($cam['location']) ?> • <?= e($cam['provider']) ?></small>
-                        </div>
-                        <span class="badge-green"><?= e($cam['status']) ?></span>
+        <!-- Right Playlist -->
+        <div class="playlist-sidebar">
+            <h4 style="font-size:0.9rem; margin-bottom:0.5rem; color:var(--text-muted); text-transform:uppercase;">Videolar (<?= count($videos) ?>)</h4>
+            <?php foreach ($videos as $idx => $v): ?>
+                <div class="playlist-card <?= $idx === 0 ? 'active' : '' ?>" onclick="switchVideo('<?= e($v['video_id']) ?>', '<?= e(addslashes($v['title'])) ?>', this)">
+                    <div class="mini-thumb" style="background-image: url('https://img.youtube.com/vi/<?= e($v['video_id']) ?>/mqdefault.jpg');"></div>
+                    <div>
+                        <div style="font-size:0.85rem; font-weight:700;"><?= e($v['title']) ?></div>
+                        <small style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;"><?= e($v['category']) ?> • <?= number_format((int)$v['views_count']) ?> izlenme</small>
                     </div>
                 </div>
             <?php endforeach; ?>
         </div>
-    </section>
+    </div>
+</section>
 
-    <!-- PAGE 3 & 4 / MODULE 3 & 4: WEATHER FORECAST & LIVE CURRENCY EXCHANGE -->
-    <section id="weather-exchange">
-        <div class="section-title-box">
+<!-- PAGE 2: LIVE WORLD CAMERAS (Skyline & Live Streams) -->
+<section class="full-page-section" id="page-cams">
+    <div class="section-header-bar">
+        <div>
+            <h2>2. Dünya Canlı Kameralar (SkylineWebcams & Live Streams)</h2>
+            <p style="color:var(--text-muted); font-size:0.875rem;">Milano Duomo, Tokyo Shibuya, Times Square ve canlı dünya kameraları.</p>
+        </div>
+        <span class="section-tag">LIVE WORLD TELEMETRY</span>
+    </div>
+
+    <div class="cams-full-grid">
+        <?php foreach ($liveCams as $cam): ?>
+            <div class="cam-box">
+                <div class="cam-viewport">
+                    <iframe src="<?= e($cam['embed_url']) ?>" allowfullscreen></iframe>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong style="font-size:1rem; display:block;"><?= e($cam['title']) ?></strong>
+                        <small style="color:var(--text-muted);"><?= e($cam['location']) ?> • <?= e($cam['provider']) ?></small>
+                    </div>
+                    <span style="color:var(--accent-emerald); font-weight:700; font-family:'JetBrains Mono',monospace;"><?= e($cam['status']) ?></span>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</section>
+
+<!-- PAGE 3: WEATHER VISUALIZER PAGE -->
+<section class="full-page-section" id="page-weather">
+    <div class="section-header-bar">
+        <div>
+            <h2>3. Canlı Hava Durumu & Uydu Haritası</h2>
+            <p style="color:var(--text-muted); font-size:0.875rem;">Türkiye ve dünya genelinde bölgesel temsil haritası ve hava raporları.</p>
+        </div>
+        <span class="section-tag">METEOROLOGY MATRIX</span>
+    </div>
+
+    <div class="weather-layout">
+        <div class="weather-map-card">
+            <h3>Türkiye Bölgesel Radar Haritası</h3>
+            <div class="turkey-svg-map">
+                <div style="text-align:center;">
+                    <div style="font-size:3rem;">🌩️ ☀️ 🌧️</div>
+                    <div style="font-family:'JetBrains Mono',monospace; color:var(--primary-cyan); margin-top:0.5rem;">İSTANBUL: 19°C | ANKARA: 15°C | İZMİR: 22°C | ANTALYA: 25°C</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:1rem;">
+            <div class="cam-box">
+                <h4>Milano</h4>
+                <div style="font-size:2rem; font-weight:800; color:var(--primary-cyan);">16 °C</div>
+                <small style="color:var(--text-muted);">Açık Güneşli • Nem %45</small>
+            </div>
+            <div class="cam-box">
+                <h4>Tokyo</h4>
+                <div style="font-size:2rem; font-weight:800; color:var(--accent-pink);">22 °C</div>
+                <small style="color:var(--text-muted);">Hafif Yağmurlu • Nem %70</small>
+            </div>
+            <div class="cam-box">
+                <h4>New York</h4>
+                <div style="font-size:2rem; font-weight:800; color:var(--accent-amber);">18 °C</div>
+                <small style="color:var(--text-muted);">Rüzgarlı • Nem %50</small>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PAGE 4: CURRENCY & CRYPTO MARKET PAGE -->
+<section class="full-page-section" id="page-currency">
+    <div class="section-header-bar">
+        <div>
+            <h2>4. Piyasa Döviz Kurları, Altın & Kripto</h2>
+            <p style="color:var(--text-muted); font-size:0.875rem;">Anlık borsa ve finansal veri grafikleri.</p>
+        </div>
+        <span class="section-tag">FINANCIAL TICKER</span>
+    </div>
+
+    <div class="currency-table-box">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1.5rem;">
+            <div class="cam-box">
+                <span style="color:var(--text-muted); font-size:0.85rem;">USD / TRY</span>
+                <div style="font-size:2.2rem; font-weight:800; color:var(--accent-emerald);">34.82 ₺</div>
+                <small style="color:var(--accent-emerald);">▲ %0.12 Yükselişte</small>
+            </div>
+            <div class="cam-box">
+                <span style="color:var(--text-muted); font-size:0.85rem;">EUR / TRY</span>
+                <div style="font-size:2.2rem; font-weight:800; color:var(--accent-emerald);">38.15 ₺</div>
+                <small style="color:var(--accent-emerald);">▲ %0.08 Yükselişte</small>
+            </div>
+            <div class="cam-box">
+                <span style="color:var(--text-muted); font-size:0.85rem;">Gram Altın</span>
+                <div style="font-size:2.2rem; font-weight:800; color:var(--accent-amber);">2.980 ₺</div>
+                <small style="color:var(--accent-amber);">▲ %0.45 Yükselişte</small>
+            </div>
+            <div class="cam-box">
+                <span style="color:var(--text-muted); font-size:0.85rem;">Bitcoin (BTC)</span>
+                <div style="font-size:2.2rem; font-weight:800; color:var(--primary-cyan);">$67,450</div>
+                <small style="color:var(--accent-emerald);">▲ %2.10 Boğa Piyasası</small>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PAGE 5: HOSTING & DATA CENTER INFRASTRUCTURE -->
+<section class="full-page-section" id="page-hosting">
+    <div class="section-header-bar">
+        <div>
+            <h2>5. Bulut Hosting & Data Center Monitörü</h2>
+            <p style="color:var(--text-muted); font-size:0.875rem;">Sunucu odası sıcaklık, güç ve uplink performansları.</p>
+        </div>
+        <span class="section-tag">HARDWARE TELEMETRY</span>
+    </div>
+
+    <div class="currency-table-box">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
             <div>
-                <h2>Canlı Hava Durumu & Finans / Döviz Kurları</h2>
-                <p style="color:var(--text-muted); font-size:0.875rem;">Anlık küresel hava verileri ve piyasa kuru takibi.</p>
+                <h3>Bulut Sunucular</h3>
+                <div style="margin-top:1rem; display:flex; flex-direction:column; gap:1rem;">
+                    <div class="cam-box"><strong>Clouding.io (Ubuntu VPS)</strong> — 99.99% Uptime</div>
+                    <div class="cam-box"><strong>Hetzner Dedicated AX102</strong> — 10 Gbps Uplink</div>
+                    <div class="cam-box"><strong>DigitalOcean Droplets</strong> — NVMe SSD</div>
+                </div>
             </div>
-            <span class="section-tag">REALTIME DATA FEED</span>
-        </div>
-
-        <div class="modules-3col">
-            <!-- Weather Module -->
-            <div class="cyber-card">
-                <h3>İstanbul & Dünya Hava Durumu</h3>
-                <ul class="data-list">
-                    <li class="data-row"><span>İstanbul</span> <span class="badge-green">19°C • Parçalı Bulutlu</span></li>
-                    <li class="data-row"><span>Milano</span> <span class="badge-green">16°C • Açık Güneşli</span></li>
-                    <li class="data-row"><span>Tokyo</span> <span class="badge-green">22°C • Yağmurlu</span></li>
-                    <li class="data-row"><span>New York</span> <span class="badge-green">18°C • Rüzgarlı</span></li>
-                    <li class="data-row"><span>Londra</span> <span class="badge-green">14°C • Sisli</span></li>
-                </ul>
-            </div>
-
-            <!-- Currency Module -->
-            <div class="cyber-card">
-                <h3>Piyasa Döviz Kurları & Altın</h3>
-                <ul class="data-list">
-                    <li class="data-row"><span>USD / TRY</span> <span class="badge-pink">34.82 ₺ ▲ %0.12</span></li>
-                    <li class="data-row"><span>EUR / TRY</span> <span class="badge-pink">38.15 ₺ ▲ %0.08</span></li>
-                    <li class="data-row"><span>GBP / TRY</span> <span class="badge-pink">45.40 ₺ ▲ %0.15</span></li>
-                    <li class="data-row"><span>Gram Altın</span> <span class="badge-green">2.980 ₺ ▲ %0.45</span></li>
-                    <li class="data-row"><span>Bitcoin (BTC)</span> <span class="badge-green">$67,450 ▲ %2.10</span></li>
-                </ul>
-            </div>
-
-            <!-- Global Tech News Module -->
-            <div class="cyber-card">
-                <h3>Teknoloji & AI Gelişmeleri</h3>
-                <ul class="data-list">
-                    <li class="data-row"><span>Docker v26 Cluster</span> <span class="badge-green">ONLINE</span></li>
-                    <li class="data-row"><span>PHP 8.3 JIT Compiler</span> <span class="badge-green">ENABLED</span></li>
-                    <li class="data-row"><span>Traefik SSL Cert</span> <span class="badge-green">VALID 90 DAYS</span></li>
-                    <li class="data-row"><span>MariaDB Query Time</span> <span class="badge-green">0.42 ms</span></li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <!-- PAGE 5 & 6 / MODULE 5 & 6: HOSTING PROVIDERS & DATA CENTER MONITORS -->
-    <section id="hosting-data">
-        <div class="section-title-box">
             <div>
-                <h2>Hosting Sağlayıcıları & Data Center Altyapısı</h2>
-                <p style="color:var(--text-muted); font-size:0.875rem;">Bulut sunucu sağlayıcılarının performans karşılaştırması ve sunucu durumları.</p>
-            </div>
-            <span class="section-tag">INFRASTRUCTURE BENCHMARK</span>
-        </div>
-
-        <div class="modules-3col">
-            <div class="cyber-card">
-                <h3>Bulut Hosting Sağlayıcıları</h3>
-                <ul class="data-list">
-                    <li class="data-row"><span>Clouding.io (Ubuntu VPS)</span> <span class="badge-green">99.99% Uptime</span></li>
-                    <li class="data-row"><span>Hetzner Dedicated</span> <span class="badge-green">10 Gbps Uplink</span></li>
-                    <li class="data-row"><span>DigitalOcean Droplets</span> <span class="badge-green">NVMe Storage</span></li>
-                    <li class="data-row"><span>AWS EC2 Multi-AZ</span> <span class="badge-green">Enterprise</span></li>
-                </ul>
-            </div>
-
-            <div class="cyber-card">
-                <h3>Data Center Sunucu Odası Metrikleri</h3>
-                <ul class="data-list">
-                    <li class="data-row"><span>Ortam Sıcaklığı</span> <span class="badge-green">18.2 °C (Ideal)</span></li>
-                    <li class="data-row"><span>Nem Oranı</span> <span class="badge-green">%42 Nem</span></li>
-                    <li class="data-row"><span>Güç Tüketimi (PUE)</span> <span class="badge-green">1.12 PUE</span></li>
-                    <li class="data-row"><span>Jeneratör & UPS</span> <span class="badge-green">STANDBY 100%</span></li>
-                </ul>
+                <h3>Data Center Odası Metrikleri</h3>
+                <div style="margin-top:1rem; display:flex; flex-direction:column; gap:1rem;">
+                    <div class="cam-box"><strong>Ortam Sıcaklığı:</strong> 18.2 °C (Optimal)</div>
+                    <div class="cam-box"><strong>Nem Oranı:</strong> %42</div>
+                    <div class="cam-box"><strong>PUE Verimlilik:</strong> 1.12</div>
+                </div>
             </div>
         </div>
-    </section>
+    </div>
+</section>
 
-    <!-- PAGE 7, 8, 9 / MODULE 7-9: FUN & ENTERTAINMENT AREA (CYBER RETRO ARCADE AGARIO GAME) -->
-    <section id="arcade-zone">
-        <div class="section-title-box">
-            <div>
-                <h2>Eğlence Alanı — Cyber Agario / Retro Arcade Game</h2>
-                <p style="color:var(--text-muted); font-size:0.875rem;">Fare hareketlerinizle siber parçacıkları toplayın ve büyüyün!</p>
-            </div>
-            <span class="section-tag">INTERACTIVE CANVAS GAME</span>
+<!-- PAGE 6: CYBER ARCADE ZONE -->
+<section class="full-page-section" id="page-arcade">
+    <div class="section-header-bar">
+        <div>
+            <h2>6. Eğlence Alanı — Cyber Agario / Retro Arcade</h2>
+            <p style="color:var(--text-muted); font-size:0.875rem;">Fare hareketlerinizle neon hücrenizi yönetin ve orbları toplayarak büyüyün!</p>
         </div>
+        <span class="section-tag">INTERACTIVE GAME</span>
+    </div>
 
-        <div class="game-wrapper">
-            <h3>Cyber Blob Collector (Agario Retro)</h3>
-            <p style="color:var(--text-muted); font-size:0.85rem;">Fareyi hareket ettirerek siber hücrenizi yönetin ve neon orbları toplayarak puan kazanın!</p>
-            <canvas id="cyberCanvas" width="800" height="400"></canvas>
-            <div style="margin-top:0.75rem; font-family:'JetBrains Mono',monospace; color:var(--primary-cyan); font-weight:700;">
-                Skorunuz: <span id="gameScore">0</span> Puan
-            </div>
+    <div class="game-container-card">
+        <h3>Cyber Blob Collector (Agario Edition)</h3>
+        <p style="color:var(--text-muted); font-size:0.85rem;">Siber orbları toplayarak skorunuzu artırın!</p>
+        <canvas id="cyberCanvas" width="900" height="420"></canvas>
+        <div style="margin-top:1rem; font-family:'JetBrains Mono',monospace; color:var(--primary-cyan); font-size:1.1rem; font-weight:800;">
+            Skorunuz: <span id="gameScore">0</span> Puan
         </div>
-    </section>
-
-</div>
+    </div>
+</section>
 
 <!-- FOOTER ("DGRWEB KİM YAAAAA") -->
 <footer class="cyber-footer">
-    <div class="footer-content">
-        <div class="dgrweb-signature">DGRWEB KİM YAAAAA?!</div>
-        <p style="color:var(--text-muted); max-width:600px; font-size:0.9rem;">DOVYE Studio — Bütünsel mühendislik, yüksek hızlı medya oynatma motorları ve baklava kesim modern UI ekosistemi.</p>
-        <div style="font-family:'JetBrains Mono',monospace; font-size:0.8rem; color:var(--primary-cyan);">
-            DOVYE Studio Multi-Domain Platform v4.0 • All Systems Nominal
-        </div>
-    </div>
+    <div class="dgrweb-title">DGRWEB KİM YAAAAA?!</div>
+    <p style="color:var(--text-muted); margin-top:1rem;">DOVYE Studio — Master Cyber Portal OS v5.0</p>
 </footer>
 
 <script>
 // Video Switcher
 function switchVideo(id, title, elem) {
-    document.getElementById('mainYoutubeFrame').src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+    document.getElementById('mainYoutubeFrame').src = 'https://www.youtube.com/embed/' + id + '?enablejsapi=1&autoplay=1';
     document.getElementById('mainVideoTitle').textContent = title;
     
-    document.querySelectorAll('.playlist-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.playlist-card').forEach(el => el.classList.remove('active'));
     elem.classList.add('active');
+}
+
+// Custom Outside Controls Logic
+function togglePlayPause() {
+    const iframe = document.getElementById('mainYoutubeFrame');
+    iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+}
+function toggleMute() {
+    const iframe = document.getElementById('mainYoutubeFrame');
+    iframe.contentWindow.postMessage('{"event":"command","func":"mute","args":""}', '*');
+}
+function restartVideo() {
+    const iframe = document.getElementById('mainYoutubeFrame');
+    iframe.contentWindow.postMessage('{"event":"command","func":"seekTo","args":[0, true]}', '*');
+}
+function setHD() {
+    alert('4K Ultra HD akış aktif!');
 }
 
 // Theme Switcher Logic
@@ -269,24 +319,40 @@ themeBtn.addEventListener('click', () => {
     setTheme(current === 'dark' ? 'light' : 'dark');
 });
 
-// Load saved theme
 const savedTheme = localStorage.getItem('dovye_theme') || 'dark';
 setTheme(savedTheme);
 
-// Cyber Agario Retro Game Logic
+// Cyber Cat Interactivity
+const catWidget = document.getElementById('cyberCatWidget');
+const catSpeech = document.getElementById('catSpeechText');
+
+const catQuotes = [
+    "Miyav! Kodlar terbiye edildi!",
+    "Skyline kameraları aktif!",
+    "DGRWEB kim yaaa?!",
+    "Siber dünya seni izliyor!",
+    "DOVYE Studio v5.0 Hazır!"
+];
+
+catWidget.addEventListener('click', () => {
+    const quote = catQuotes[Math.floor(Math.random() * catQuotes.length)];
+    catSpeech.textContent = quote;
+});
+
+// Cyber Agario Canvas Game Logic
 const canvas = document.getElementById('cyberCanvas');
 const ctx = canvas.getContext('2d');
 const scoreElem = document.getElementById('gameScore');
 
-let player = { x: 400, y: 200, r: 15, color: '#00f2fe' };
+let player = { x: 450, y: 210, r: 16, color: '#00f2fe' };
 let score = 0;
 let foods = [];
 
-for (let i = 0; i < 35; i++) {
+for (let i = 0; i < 40; i++) {
     foods.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        r: 5,
+        r: 6,
         color: ['#ff007f', '#00f5a0', '#38bdf8', '#f59e0b'][Math.floor(Math.random() * 4)]
     });
 }
@@ -300,33 +366,30 @@ canvas.addEventListener('mousemove', (e) => {
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw foods
     foods.forEach((f, idx) => {
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
         ctx.fillStyle = f.color;
         ctx.fill();
 
-        // Check collision
         let dist = Math.hypot(player.x - f.x, player.y - f.y);
         if (dist < player.r + f.r) {
             score += 10;
-            player.r = Math.min(45, player.r + 0.5);
+            player.r = Math.min(50, player.r + 0.4);
             scoreElem.textContent = score;
             foods[idx] = {
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
-                r: 5,
+                r: 6,
                 color: ['#ff007f', '#00f5a0', '#38bdf8', '#f59e0b'][Math.floor(Math.random() * 4)]
             };
         }
     });
 
-    // Draw player
     ctx.beginPath();
     ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
     ctx.fillStyle = player.color;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 18;
     ctx.shadowColor = player.color;
     ctx.fill();
     ctx.shadowBlur = 0;

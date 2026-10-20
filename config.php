@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * DOVYE STUDIO — Mega Cyber OS v4.0 Global Config
+ * DOVYE STUDIO — Mega Cyber Engine v5.0
  */
 
 define('DB_HOST', getenv('DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'dovye-mysql'));
@@ -16,7 +16,6 @@ define('DEFAULT_ADMIN_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh
 
 date_default_timezone_set('Europe/Istanbul');
 
-// Headers
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -32,7 +31,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
-    session_name('dovye_v4_session');
+    session_name('dovye_v5_session');
     session_start();
 }
 
@@ -54,12 +53,33 @@ function db(): ?PDO
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+03:00'",
             PDO::ATTR_TIMEOUT            => 3,
         ]);
+
+        // Auto Schema Migration Check to prevent 1054 Unknown Column error
+        auto_migrate_schema($pdo);
+
         return $pdo;
     } catch (PDOException $e) {
         $failed = true;
         error_log('DB Error: ' . $e->getMessage());
         return null;
     }
+}
+
+function auto_migrate_schema(PDO $pdo): void
+{
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM live_cams LIKE 'provider'")->fetchAll();
+        if (empty($cols)) {
+            $pdo->exec("ALTER TABLE live_cams ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'Skyline / YouTube' AFTER embed_url");
+        }
+    } catch (Throwable $t) {}
+
+    try {
+        $colsAdmin = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'theme_pref'")->fetchAll();
+        if (empty($colsAdmin)) {
+            $pdo->exec("ALTER TABLE admin_users ADD COLUMN theme_pref VARCHAR(20) NOT NULL DEFAULT 'dark'");
+        }
+    } catch (Throwable $t) {}
 }
 
 function log_system_action(string $action, string $details = ''): void

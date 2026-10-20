@@ -16,7 +16,6 @@ function is_logged_in(): bool
 $pdo = db();
 $errors = [];
 
-// Seed Default Admin User if empty
 if ($pdo) {
     try {
         $check = $pdo->query('SELECT COUNT(*) FROM admin_users')->fetchColumn();
@@ -110,7 +109,7 @@ if ($action === 'update_theme' && is_logged_in()) {
             $stmt = $pdo->prepare('UPDATE admin_users SET theme_pref = :t WHERE username = :u');
             $stmt->execute([':t' => $theme, ':u' => $_SESSION['admin_user']]);
         }
-        flash('ok', 'Admin paneli teması değiştirildi!');
+        flash('ok', 'Admin paneli teması güncellendi!');
     }
     redirect('admin.php');
 }
@@ -200,7 +199,7 @@ if (!is_logged_in()) {
 <div class="cyber-card" style="width:100%; max-width:400px;">
     <div style="display:flex; align-items:center; gap:0.5rem; font-weight:800; color:var(--primary-cyan); margin-bottom:1.5rem;">
         <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
-        <span>DOVYE CORE OS v4.0</span>
+        <span>DOVYE CORE OS v5.0</span>
     </div>
 
     <h2>Yönetici Girişi</h2>
@@ -244,7 +243,7 @@ $flash = flash();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin OS v4.0 — DOVYE Studio</title>
+    <title>Admin OS v5.0 — DOVYE Studio</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
@@ -257,7 +256,7 @@ $flash = flash();
             <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
             <div>
                 <strong style="display:block;">DOVYE<span>CORE</span></strong>
-                <small style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">OS v4.0</small>
+                <small style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">OS v5.0</small>
             </div>
         </div>
 
@@ -275,7 +274,7 @@ $flash = flash();
                 <input type="hidden" name="action" value="update_theme">
                 <input type="hidden" name="theme" value="<?= $adminTheme === 'dark' ? 'light' : 'dark' ?>">
                 <button type="submit" class="cyber-btn btn-ghost btn-sm" style="width:100%;">
-                    Tema Değiştir (<?= $adminTheme === 'dark' ? 'Açık' : 'Koyu' ?>)
+                    Tema Değiştir (<?= $adminTheme === 'dark' ? 'Açık Moda Geç' : 'Koyu Moda Geç' ?>)
                 </button>
             </form>
 
@@ -296,7 +295,7 @@ $flash = flash();
 
         <?php if ($activeTab === 'dashboard'): ?>
             <h2>Genel Bakış Merkezi</h2>
-            <p style="color:var(--text-muted); margin-bottom:2rem;">DOVYE Studio CMS v4.0 Sistem Durumu</p>
+            <p style="color:var(--text-muted); margin-bottom:2rem;">DOVYE Studio CMS v5.0 Sistem Durumu</p>
 
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1.25rem;">
                 <div class="cyber-card">
@@ -315,8 +314,6 @@ $flash = flash();
 
         <?php elseif ($activeTab === 'youtube'): ?>
             <h2>YouTube Video Yönetimi</h2>
-            <p style="color:var(--text-muted); margin-bottom:1.5rem;">Sitenin ana sayfasındaki Theatre Mode ve Playlist için video ekleyin.</p>
-
             <div class="cyber-card" style="margin-bottom:2rem;">
                 <h3>Yeni YouTube Videosu Ekle</h3>
                 <form method="post" action="admin.php?tab=youtube" style="margin-top:1rem;">
@@ -367,8 +364,6 @@ $flash = flash();
 
         <?php elseif ($activeTab === 'cameras'): ?>
             <h2>Canlı Kameralar Yönetimi</h2>
-            <p style="color:var(--text-muted); margin-bottom:1.5rem;">SkylineWebcams, YouTube Live ve dış akış adreslerini ekleyin.</p>
-
             <div class="cyber-card" style="margin-bottom:2rem;">
                 <h3>Yeni Canlı Kamera Ekle</h3>
                 <form method="post" action="admin.php?tab=cameras" style="margin-top:1rem;">
