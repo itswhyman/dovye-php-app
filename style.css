@@ -1,28 +1,29 @@
-/* TurkBil Oyun Fuarı v7.0 CSS Engine */
+/* TurkBil Oyun Fuarı v8.0 Enterprise Master CSS Engine */
 
 :root, [data-theme="dark"] {
-  --bg-main: #030712;
-  --bg-surface: #0b1329;
-  --bg-card: #111c38;
-  --bg-card-hover: #19284d;
-  --bg-input: #060b18;
+  --bg-main: #020612;
+  --bg-surface: #0a1128;
+  --bg-card: #101b38;
+  --bg-card-hover: #182850;
+  --bg-input: #050a1b;
 
-  --border-color: #1e2e52;
+  --border-color: #1e315a;
   --primary-cyan: #00f2fe;
   --accent-pink: #ff007f;
   --accent-emerald: #00f5a0;
   --accent-amber: #f59e0b;
+  --accent-purple: #a855f7;
 
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  --shadow-color: rgba(0, 242, 254, 0.2);
+  --shadow-color: rgba(0, 242, 254, 0.25);
 }
 
 [data-theme="light"] {
-  --bg-main: #f1f5f9;
+  --bg-main: #f8fafc;
   --bg-surface: #ffffff;
   --bg-card: #ffffff;
-  --bg-card-hover: #f8fafc;
+  --bg-card-hover: #f1f5f9;
   --bg-input: #e2e8f0;
 
   --border-color: #cbd5e1;
@@ -30,6 +31,7 @@
   --accent-pink: #d946ef;
   --accent-emerald: #10b981;
   --accent-amber: #d97706;
+  --accent-purple: #9333ea;
 
   --text-main: #0f172a;
   --text-muted: #64748b;
@@ -50,23 +52,22 @@ body {
   min-height: 100vh;
 }
 
-/* Background Cyber Grid */
 .cyber-bg-grid {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
   background-image: linear-gradient(rgba(0, 242, 254, 0.04) 1px, transparent 1px),
                     linear-gradient(90deg, rgba(0, 242, 254, 0.04) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-size: 36px 36px;
   pointer-events: none;
   z-index: 0;
 }
 
-/* NICK ENTER MODAL (FIRST ENTRY) */
+/* NICK ENTER MODAL */
 .nick-overlay {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(3, 7, 18, 0.92);
-  backdrop-filter: blur(20px);
+  background: rgba(2, 6, 18, 0.94);
+  backdrop-filter: blur(24px);
   z-index: 99999;
   display: grid;
   place-items: center;
@@ -75,29 +76,28 @@ body {
 
 .nick-card {
   width: 100%;
-  max-width: 480px;
+  max-width: 520px;
   background: var(--bg-surface);
   border: 2px solid var(--primary-cyan);
   clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
   padding: 2.2rem;
-  box-shadow: 0 0 40px var(--shadow-color);
+  box-shadow: 0 0 50px var(--shadow-color);
   text-align: center;
 }
 
-.nick-input {
+.nick-input, .skin-select {
   width: 100%;
   padding: 0.85rem 1.25rem;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
   color: var(--text-main);
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-family: 'JetBrains Mono', monospace;
-  margin: 1.2rem 0;
+  margin: 0.6rem 0;
   text-align: center;
   outline: none;
 }
-.nick-input:focus { border-color: var(--primary-cyan); }
 
 /* FLOATING HEADER */
 .main-header {
@@ -116,14 +116,14 @@ body {
 
 .logo-text {
   font-weight: 800;
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   letter-spacing: -0.02em;
 }
 .logo-text span { color: var(--primary-cyan); }
 
 /* GAME GRID MENU */
 .menu-container {
-  max-width: 1300px;
+  max-width: 1350px;
   margin: 110px auto 4rem;
   padding: 0 1.5rem;
   position: relative;
@@ -140,7 +140,7 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
-  padding: 1.5rem;
+  padding: 1.6rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -175,11 +175,11 @@ body {
   position: absolute;
   bottom: 20px;
   left: 20px;
-  width: 180px;
-  height: 180px;
-  background: rgba(11, 19, 41, 0.75);
-  border: 1px solid var(--primary-cyan);
-  backdrop-filter: blur(12px);
+  width: 200px;
+  height: 200px;
+  background: rgba(10, 17, 40, 0.85);
+  border: 2px solid var(--primary-cyan);
+  backdrop-filter: blur(14px);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
   z-index: 10;
 }
@@ -189,16 +189,18 @@ body {
   height: 100%;
 }
 
-/* LIVE LEADERBOARD (TOP RIGHT IN GAME) */
+/* LIVE LEADERBOARD TOP 10 (TOP RIGHT IN GAME) */
 .live-leaderboard {
   position: absolute;
   top: 20px;
   right: 20px;
-  width: 220px;
-  background: rgba(11, 19, 41, 0.85);
-  border: 1px solid var(--accent-pink);
-  backdrop-filter: blur(12px);
-  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  width: 250px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: rgba(10, 17, 40, 0.88);
+  border: 2px solid var(--accent-pink);
+  backdrop-filter: blur(14px);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   padding: 0.85rem 1rem;
   z-index: 10;
   font-family: 'JetBrains Mono', monospace;
@@ -207,11 +209,46 @@ body {
 .leader-item {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
+  font-size: 0.775rem;
   margin-top: 0.35rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.1);
 }
 
-/* BUTTONS & BADGES */
+/* CONTROLS GUIDE BAR (ONLY MOUSE, W, SPACE DISPLAYED!) */
+.controls-guide-bar {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(10, 17, 40, 0.9);
+  border: 1px solid var(--primary-cyan);
+  padding: 0.65rem 1.2rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  z-index: 10;
+}
+
+/* MINI-GAME MODAL CANVAS OVERLAY */
+.minigame-modal {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(2, 6, 18, 0.95);
+  backdrop-filter: blur(20px);
+  z-index: 99999;
+  display: none;
+  place-items: center;
+}
+
+.minigame-box {
+  background: var(--bg-surface);
+  border: 2px solid var(--primary-cyan);
+  padding: 1.5rem;
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+  text-align: center;
+}
+
 .cyber-btn {
   display: inline-flex;
   align-items: center;
@@ -230,18 +267,3 @@ body {
 
 .btn-pink { background: var(--accent-pink); color: #fff; }
 .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.775rem; }
-
-/* CONTROLS GUIDE PANEL */
-.controls-guide-bar {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  background: rgba(11, 19, 41, 0.85);
-  border: 1px solid var(--border-color);
-  padding: 0.6rem 1rem;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-  z-index: 10;
-}

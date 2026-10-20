@@ -16,7 +16,7 @@ if (!($_SESSION['admin_logged'] ?? false)) {
     <head><title>Admin Giriş — TurkBil</title><link rel="stylesheet" href="assets/style.css"></head>
     <body style="display:grid; place-items:center; min-height:100vh;">
     <div class="nick-card">
-        <h2>TurkBil Admin OS</h2>
+        <h2>TurkBil Admin OS v8.0</h2>
         <form method="post" style="margin-top:1rem;">
             <input type="hidden" name="action" value="login">
             <input type="text" name="username" class="nick-input" placeholder="admin" required>
@@ -31,7 +31,7 @@ if (!($_SESSION['admin_logged'] ?? false)) {
 }
 
 $pdo = db();
-$scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_score DESC")->fetchAll() : [];
+$scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_score DESC LIMIT 10")->fetchAll() : [];
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -41,10 +41,10 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
 </head>
 <body style="padding:2rem;">
     <h2>TurkBil Oyun Fuarı Yönetim Paneli</h2>
-    <p style="color:var(--text-muted);">Canlı Skorlar ve Sistem Durumu</p>
+    <p style="color:var(--text-muted);">Canlı Skorlar ve Top 10 Oyuncu Sıralaması</p>
 
     <div style="margin-top:2rem; background:var(--bg-card); padding:1.5rem; border:1px solid var(--primary-cyan);">
-        <h3>Top Oyuncu Lider Tablosu</h3>
+        <h3>Top 10 Oyuncu Lider Tablosu</h3>
         <table style="width:100%; border-collapse:collapse; margin-top:1rem;">
             <thead>
                 <tr style="text-align:left; border-bottom:1px solid var(--border-color);">

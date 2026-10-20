@@ -16,7 +16,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_name('turkbil_v7_session');
+    session_name('turkbil_v8_session');
     session_start();
 }
 
