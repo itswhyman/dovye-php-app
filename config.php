@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * DOVYE STUDIO — Mega Cyber Engine v5.0
+ * DOVYE STUDIO — Enterprise OS v6.0 Blueprint Engine
  */
 
 define('DB_HOST', getenv('DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'dovye-mysql'));
@@ -31,7 +31,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
-    session_name('dovye_v5_session');
+    session_name('dovye_v6_session');
     session_start();
 }
 
@@ -54,9 +54,7 @@ function db(): ?PDO
             PDO::ATTR_TIMEOUT            => 3,
         ]);
 
-        // Auto Schema Migration Check to prevent 1054 Unknown Column error
         auto_migrate_schema($pdo);
-
         return $pdo;
     } catch (PDOException $e) {
         $failed = true;
@@ -82,13 +80,13 @@ function auto_migrate_schema(PDO $pdo): void
     } catch (Throwable $t) {}
 }
 
-function log_system_action(string $action, string $details = ''): void
+function log_system_action(string $action, string $details = '', string $severity = 'INFO'): void
 {
     $pdo = db();
     if (!$pdo) return;
     try {
-        $stmt = $pdo->prepare('INSERT INTO system_logs (action, details, ip_address) VALUES (:act, :det, :ip)');
-        $stmt->execute([':act' => $action, ':det' => $details, ':ip' => client_ip()]);
+        $stmt = $pdo->prepare('INSERT INTO system_logs (severity, action, details, ip_address) VALUES (:sev, :act, :det, :ip)');
+        $stmt->execute([':sev' => $severity, ':act' => $action, ':det' => $details, ':ip' => client_ip()]);
     } catch (Throwable $t) {}
 }
 

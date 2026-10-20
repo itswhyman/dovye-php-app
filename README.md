@@ -1,3 +1,3 @@
-# DOVYE STUDIO — Mega Cyber OS v5.0
+# DOVYE STUDIO — Enterprise OS v6.0 Blueprint
 
-Tek yerellik ilkesiyle ayrılmış 100vh sayfalar, dikey dış oynatıcı kontrolleri, tatlı siber kedi widget'ı, tema düzeltmeleri ve otomatik veritabanı migrasyonu.
+Dünya ölçeğinde dağıtık, micro-frontend destekli, 100vh tek yerellik ilkesiyle çalışan master yazılım mimarisi.

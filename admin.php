@@ -20,7 +20,7 @@ if ($pdo) {
     try {
         $check = $pdo->query('SELECT COUNT(*) FROM admin_users')->fetchColumn();
         if ((int)$check === 0) {
-            $stmt = $pdo->prepare('INSERT INTO admin_users (username, password_hash, theme_pref) VALUES (:u, :p, "dark")');
+            $stmt = $pdo->prepare('INSERT INTO admin_users (username, email, password_hash, theme_pref) VALUES (:u, "admin@dovye.com.tr", :p, "dark")');
             $stmt->execute([':u' => DEFAULT_ADMIN_USER, ':p' => DEFAULT_ADMIN_HASH]);
         }
     } catch (Throwable $t) {}
@@ -59,7 +59,7 @@ if ($action === 'login') {
             log_system_action('ADMIN_LOGIN_SUCCESS', "User: {$row['username']}");
             redirect('admin.php');
         } else {
-            log_system_action('ADMIN_LOGIN_FAILED', "Attempted user: $user");
+            log_system_action('ADMIN_LOGIN_FAILED', "Attempted user: $user", 'WARN');
             $errors[] = 'Kullanıcı adı veya şifre hatalı.';
         }
     }
@@ -188,7 +188,7 @@ if (!is_logged_in()) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Giriş — DOVYE Admin Hub</title>
+    <title>Giriş — DOVYE Enterprise Admin Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
@@ -199,7 +199,7 @@ if (!is_logged_in()) {
 <div class="cyber-card" style="width:100%; max-width:400px;">
     <div style="display:flex; align-items:center; gap:0.5rem; font-weight:800; color:var(--primary-cyan); margin-bottom:1.5rem;">
         <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
-        <span>DOVYE CORE OS v5.0</span>
+        <span>DOVYE ENTERPRISE OS v6.0</span>
     </div>
 
     <h2>Yönetici Girişi</h2>
@@ -234,6 +234,7 @@ $adminTheme = $_SESSION['admin_theme'] ?? 'dark';
 
 $yt_videos = $pdo ? $pdo->query('SELECT * FROM youtube_videos ORDER BY id DESC')->fetchAll() : [];
 $cams      = $pdo ? $pdo->query('SELECT * FROM live_cams ORDER BY id DESC')->fetchAll() : [];
+$nodes     = $pdo ? $pdo->query('SELECT * FROM cluster_nodes ORDER BY id DESC')->fetchAll() : [];
 $logs      = $pdo ? $pdo->query('SELECT * FROM system_logs ORDER BY id DESC LIMIT 50')->fetchAll() : [];
 
 $flash = flash();
@@ -243,7 +244,7 @@ $flash = flash();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin OS v5.0 — DOVYE Studio</title>
+    <title>Enterprise Admin OS v6.0 — DOVYE Studio</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
@@ -256,7 +257,7 @@ $flash = flash();
             <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
             <div>
                 <strong style="display:block;">DOVYE<span>CORE</span></strong>
-                <small style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">OS v5.0</small>
+                <small style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">ENTERPRISE OS v6.0</small>
             </div>
         </div>
 
@@ -264,6 +265,7 @@ $flash = flash();
             <a href="admin.php?tab=dashboard" class="admin-nav-item <?= $activeTab === 'dashboard' ? 'active' : '' ?>">Genel Bakış</a>
             <a href="admin.php?tab=youtube" class="admin-nav-item <?= $activeTab === 'youtube' ? 'active' : '' ?>">YouTube Video Hub</a>
             <a href="admin.php?tab=cameras" class="admin-nav-item <?= $activeTab === 'cameras' ? 'active' : '' ?>">Canlı Kameralar</a>
+            <a href="admin.php?tab=nodes" class="admin-nav-item <?= $activeTab === 'nodes' ? 'active' : '' ?>">Cluster Nodes</a>
             <a href="admin.php?tab=logs" class="admin-nav-item <?= $activeTab === 'logs' ? 'active' : '' ?>">Sistem Logları</a>
             <a href="admin.php?tab=security" class="admin-nav-item <?= $activeTab === 'security' ? 'active' : '' ?>">Şifre & Güvenlik</a>
         </nav>
@@ -295,7 +297,7 @@ $flash = flash();
 
         <?php if ($activeTab === 'dashboard'): ?>
             <h2>Genel Bakış Merkezi</h2>
-            <p style="color:var(--text-muted); margin-bottom:2rem;">DOVYE Studio CMS v5.0 Sistem Durumu</p>
+            <p style="color:var(--text-muted); margin-bottom:2rem;">DOVYE Studio Enterprise OS v6.0 Sistem Telemetrisi</p>
 
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1.25rem;">
                 <div class="cyber-card">
@@ -307,8 +309,12 @@ $flash = flash();
                     <div style="font-size:2.2rem; font-weight:800; color:var(--accent-pink);"><?= count($cams) ?></div>
                 </div>
                 <div class="cyber-card">
-                    <span style="color:var(--text-muted); font-size:0.8rem;">Sistem Log Kayıtları</span>
-                    <div style="font-size:2.2rem; font-weight:800; color:var(--accent-emerald);"><?= count($logs) ?></div>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">Cluster Sunucu Düğümleri</span>
+                    <div style="font-size:2.2rem; font-weight:800; color:var(--accent-emerald);"><?= count($nodes) ?></div>
+                </div>
+                <div class="cyber-card">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">Sistem Audit Kayıtları</span>
+                    <div style="font-size:2.2rem; font-weight:800; color:var(--accent-amber);"><?= count($logs) ?></div>
                 </div>
             </div>
 
@@ -412,6 +418,27 @@ $flash = flash();
                                         <button type="submit" class="cyber-btn btn-pink btn-sm">Sil</button>
                                     </form>
                                 </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+        <?php elseif ($activeTab === 'nodes'): ?>
+            <h2>Cluster Sunucu Düğümleri (Telemetri)</h2>
+            <div class="cyber-card">
+                <table class="cyber-table">
+                    <thead><tr><th>ID</th><th>Sunucu Adı</th><th>IP Adresi</th><th>Rol</th><th>CPU</th><th>RAM</th><th>Durum</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($nodes as $n): ?>
+                            <tr>
+                                <td>#<?= $n['id'] ?></td>
+                                <td><strong><?= e($n['node_name']) ?></strong></td>
+                                <td><code><?= e($n['ip_address']) ?></code></td>
+                                <td><?= e($n['role']) ?></td>
+                                <td><?= $n['cpu_usage'] ?>%</td>
+                                <td><?= $n['ram_usage'] ?>%</td>
+                                <td><span style="color:var(--accent-emerald); font-weight:700;"><?= e($n['status']) ?></span></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
