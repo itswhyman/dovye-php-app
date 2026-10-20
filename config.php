@@ -1,10 +1,6 @@
 <?php
 declare(strict_types=1);
 
-/**
- * DOVYE STUDIO — Enterprise OS v6.0 Blueprint Engine
- */
-
 define('DB_HOST', getenv('DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'dovye-mysql'));
 define('DB_PORT', getenv('DB_PORT') ?: (getenv('MYSQL_PORT') ?: '3306'));
 define('DB_NAME', getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: (getenv('MYSQL_DATABASE') ?: 'lead_panel')));
@@ -18,20 +14,9 @@ date_default_timezone_set('Europe/Istanbul');
 
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-
-$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_set_cookie_params([
-        'lifetime' => 86400,
-        'path'     => '/',
-        'secure'   => $isHttps,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-    session_name('dovye_v6_session');
+    session_name('turkbil_v7_session');
     session_start();
 }
 
@@ -50,106 +35,33 @@ function db(): ?PDO
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+03:00'",
             PDO::ATTR_TIMEOUT            => 3,
         ]);
-
-        auto_migrate_schema($pdo);
         return $pdo;
     } catch (PDOException $e) {
         $failed = true;
-        error_log('DB Error: ' . $e->getMessage());
         return null;
     }
 }
 
-function auto_migrate_schema(PDO $pdo): void
-{
-    try {
-        $cols = $pdo->query("SHOW COLUMNS FROM live_cams LIKE 'provider'")->fetchAll();
-        if (empty($cols)) {
-            $pdo->exec("ALTER TABLE live_cams ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'Skyline / YouTube' AFTER embed_url");
-        }
-    } catch (Throwable $t) {}
-
-    try {
-        $colsAdmin = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'theme_pref'")->fetchAll();
-        if (empty($colsAdmin)) {
-            $pdo->exec("ALTER TABLE admin_users ADD COLUMN theme_pref VARCHAR(20) NOT NULL DEFAULT 'dark'");
-        }
-    } catch (Throwable $t) {}
+function e(?string $v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-function log_system_action(string $action, string $details = '', string $severity = 'INFO'): void
-{
-    $pdo = db();
-    if (!$pdo) return;
-    try {
-        $stmt = $pdo->prepare('INSERT INTO system_logs (severity, action, details, ip_address) VALUES (:sev, :act, :det, :ip)');
-        $stmt->execute([':sev' => $severity, ':act' => $action, ':det' => $details, ':ip' => client_ip()]);
-    } catch (Throwable $t) {}
-}
-
-function parse_youtube_id(string $url): ?string
-{
-    if (preg_match('/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\x2F|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i', $url, $match)) {
-        return $match[1];
-    }
-    return null;
-}
-
-function e(?string $value): string
-{
-    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-}
-
-function csrf_token(): string
-{
-    if (empty($_SESSION['csrf'])) {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    }
+function csrf_token(): string {
+    if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
     return $_SESSION['csrf'];
 }
 
-function csrf_field(): string
-{
+function csrf_field(): string {
     return '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">';
 }
 
-function csrf_valid(): bool
-{
-    $sent = $_POST['csrf'] ?? '';
-    return is_string($sent) && $sent !== '' && hash_equals($_SESSION['csrf'] ?? '', $sent);
+function csrf_valid(): bool {
+    return hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'] ?? '');
 }
 
-function flash(?string $type = null, ?string $message = null): ?array
-{
-    if ($type !== null && $message !== null) {
-        $_SESSION['flash'] = ['type' => $type, 'message' => $message];
-        return null;
-    }
-    $f = $_SESSION['flash'] ?? null;
-    unset($_SESSION['flash']);
-    return $f;
-}
-
-function redirect(string $url): never
-{
+function redirect(string $url): never {
     header('Location: ' . $url);
     exit;
-}
-
-function client_ip(): string
-{
-    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
-    $isPrivate = filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
-    if ($isPrivate && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        foreach (explode(',', (string) $_SERVER['HTTP_X_FORWARDED_FOR']) as $candidate) {
-            $candidate = trim($candidate);
-            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
-                return $candidate;
-            }
-        }
-    }
-    return $remote;
 }

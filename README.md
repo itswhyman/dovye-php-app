@@ -1,3 +1,2 @@
-# DOVYE STUDIO — Enterprise OS v6.0 Blueprint
-
-Dünya ölçeğinde dağıtık, micro-frontend destekli, 100vh tek yerellik ilkesiyle çalışan master yazılım mimarisi.
+# TurkBil Oyun Fuarı — DGRWEB.IO Master Agario Platform
+5 Oyunlu Siber Oyun Fuarı Portalı ve Agario Engine.
