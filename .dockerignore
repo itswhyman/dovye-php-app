@@ -1,6 +1,6 @@
 .git
 .gitignore
-Dockerfile
-.dockerignore
-README.md
-schema.sql
+*.md
+.env
+docker-compose.yml
+.DS_Store

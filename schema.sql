@@ -1,3 +1,4 @@
+-- DOVYE Studio — Lead & Customer Analytics Database Schema
 CREATE DATABASE IF NOT EXISTS lead_panel
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
@@ -19,7 +20,3 @@ CREATE TABLE IF NOT EXISTS leads (
   KEY idx_created (created_at),
   KEY idx_service (service)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Uygulama için yalnızca gerekli yetkilere sahip bir kullanıcı (şifreyi değiştirin):
--- CREATE USER 'lead_user'@'localhost' IDENTIFIED BY 'change-this-db-password';
--- GRANT SELECT, INSERT, UPDATE ON lead_panel.leads TO 'lead_user'@'localhost';

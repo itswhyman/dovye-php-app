@@ -2,61 +2,59 @@
 declare(strict_types=1);
 
 /**
- * Ortak yapılandırma: PDO bağlantısı, oturum ayarları, güvenlik başlıkları ve yardımcılar.
- * Üretimde değerleri ortam değişkenlerinden (getenv) verin; bu dosyayı web kökü dışında tutmanız önerilir.
+ * DOVYE Studio — Core Engine & Configuration
  */
 
-// ---- Veritabanı ----------------------------------------------------------
-define('DB_HOST', getenv('DB_HOST') ?: 'dovye-mysql'); // Coolify MySQL konteyner adı
-define('DB_PORT', getenv('DB_PORT') ?: '3306');
-define('DB_NAME', getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: 'mysql'));
-define('DB_USER', getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: 'mysql'));
-define('DB_PASS', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: 'COOLIFY_MYSQL_SIFRENIZI_YAZIN'));
+// ---- Veritabanı Yapılandırması (Coolify & Standalone Uyumlu) -------------
+define('DB_HOST', getenv('DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'dovye-mysql'));
+define('DB_PORT', getenv('DB_PORT') ?: (getenv('MYSQL_PORT') ?: '3306'));
+define('DB_NAME', getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: (getenv('MYSQL_DATABASE') ?: 'lead_panel')));
+define('DB_USER', getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: (getenv('MYSQL_USER') ?: 'root')));
+define('DB_PASS', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: (getenv('MYSQL_PASSWORD') ?: '')));
 
-// ---- Yönetici girişi -----------------------------------------------------
-// Varsayılan kullanıcı: admin  |  varsayılan şifre: ChangeMe!2026  (İLK İŞ DEĞİŞTİRİN)
-// Yeni hash üretmek için:  php -r "echo password_hash('yeni-sifreniz', PASSWORD_DEFAULT), PHP_EOL;"
+// ---- Yönetici Girişi -----------------------------------------------------
 define('ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
-define('ADMIN_PASSWORD_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh33BfhAMO2Y4.hk/qQFlv6doCLZASlWGP1zHZGtO3ioi');
+define('ADMIN_PASSWORD_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh33BfhAMO2Y4.hk/qQFlv6doCLZASlWGP1zHZGtO3ioi'); // Default: ChangeMe!2026
 
-// ---- Uygulama sabitleri --------------------------------------------------
+// ---- Hizmetler ve Durumlar -----------------------------------------------
 const SERVICES = [
-    'web'       => 'Web Tasarım',
-    'seo'       => 'SEO & Analitik',
-    'mobile'    => 'Mobil Uygulama',
-    'consult'   => 'Danışmanlık',
-    'other'     => 'Diğer',
+    'web'       => 'Web & Mobile App Development',
+    'uiux'      => 'UI/UX Design & Brand System',
+    'seo'       => 'SEO & Performance Growth',
+    'consult'   => 'Cloud & DevOps Architecture',
+    'other'     => 'Özel Yazılım Çözümleri',
 ];
 
 const STATUSES = [
-    'new'       => 'Yeni',
-    'read'      => 'Okundu',
+    'new'       => 'Yeni Aday',
+    'read'      => 'İncelendi',
     'contacted' => 'İletişime Geçildi',
 ];
 
 date_default_timezone_set('Europe/Istanbul');
 
-// ---- Güvenlik başlıkları -------------------------------------------------
+// ---- Security Headers ---------------------------------------------------
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
-header('Referrer-Policy: same-origin');
-header("Content-Security-Policy: default-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+header('Referrer-Policy: strict-origin-when-cross-origin');
 
-// ---- Oturum --------------------------------------------------------------
-// Traefik TLS'i sonlandırır; konteynere HTTP gelir, HTTPS bilgisi X-Forwarded-Proto ile iletilir.
+// ---- Session Configuration ----------------------------------------------
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'secure'   => $isHttps,
-    'httponly' => true,
-    'samesite' => 'Strict',
-]);
-session_name('lp_session');
-session_start();
 
-// ---- PDO -----------------------------------------------------------------
+if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params([
+        'lifetime' => 86400,
+        'path'     => '/',
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_name('dovye_session');
+    session_start();
+}
+
+// ---- PDO Connection Helper ----------------------------------------------
 function db(): PDO
 {
     static $pdo = null;
@@ -70,21 +68,42 @@ function db(): PDO
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false, // gerçek prepared statement
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+03:00'", // PHP saat dilimiyle uyumlu (Europe/Istanbul)
+            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+03:00'",
         ]);
     } catch (PDOException $e) {
-        error_log('DB bağlantı hatası: ' . $e->getMessage());
+        error_log('DB Connection Error: ' . $e->getMessage());
         http_response_code(500);
-        exit('Veritabanına şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.');
+        die('
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Sistem Bağlantı Bekleniyor | DOVYE Studio</title>
+            <style>
+                body { background: #090d16; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; text-align: center; }
+                .card { background: #131b2e; padding: 2.5rem; border-radius: 20px; border: 1px solid #1e293b; max-width: 480px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+                h1 { color: #38bdf8; font-size: 1.5rem; margin-bottom: 0.5rem; font-weight: 700; }
+                p { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }
+                .badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.85rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border-radius: 99px; font-size: 0.8rem; font-weight: 600; margin-bottom: 1.25rem; border: 1px solid rgba(239, 68, 68, 0.2); }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <span class="badge">⚠️ Veritabanı Bağlantısı Kesildi</span>
+                <h1>DOVYE Studio Altyapısı</h1>
+                <p>Veritabanı sunucusuna erişilemiyor. Lütfen MariaDB konteynerinizin aktif olduğundan ve env değişkenlerinin doğru tanımlandığından emin olun.</p>
+            </div>
+        </body>
+        </html>
+        ');
     }
 
     return $pdo;
 }
 
-// ---- Yardımcılar ---------------------------------------------------------
-
-/** HTML çıktısı için kaçış (XSS koruması). */
+// ---- Helpers ------------------------------------------------------------
 function e(?string $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -109,7 +128,6 @@ function csrf_valid(): bool
     return is_string($sent) && $sent !== '' && hash_equals($_SESSION['csrf'] ?? '', $sent);
 }
 
-/** Tek seferlik mesaj (flash). */
 function flash(?string $type = null, ?string $message = null): ?array
 {
     if ($type !== null && $message !== null) {
@@ -127,7 +145,6 @@ function redirect(string $url): never
     exit;
 }
 
-/** Ziyaretçi IP'si: proxy (Traefik) arkasında X-Forwarded-For'un ilk geçerli adresi. */
 function client_ip(): string
 {
     $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');

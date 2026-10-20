@@ -3,16 +3,11 @@ declare(strict_types=1);
 
 require __DIR__ . '/config.php';
 
-const IDLE_TIMEOUT   = 1800; // 30 dk hareketsizlikte oturum kapanır
-const MAX_FAILS      = 5;    // art arda yanlış giriş sınırı
-const LOCK_SECONDS   = 300;  // sınır aşılınca 5 dk kilit
-const PER_PAGE       = 15;
+const IDLE_TIMEOUT = 1800; // 30 mins
+const MAX_FAILS    = 5;
+const LOCK_SECONDS = 300;
+const PER_PAGE     = 15;
 
-// ---------------------------------------------------------------------------
-// Yardımcılar
-// ---------------------------------------------------------------------------
-
-/** Filtreleri (durum, arama, sayfa) doğrulayarak okur. $p: alan öneki. */
 function read_filters(array $src, string $p = ''): array
 {
     $status = $src[$p . 'status'] ?? '';
@@ -49,7 +44,7 @@ function is_logged_in(): bool
 }
 
 // ---------------------------------------------------------------------------
-// POST işlemleri
+// POST Actions
 // ---------------------------------------------------------------------------
 
 $loginError = null;
@@ -59,14 +54,13 @@ if ($action === 'login') {
     $lockedUntil = (int) ($_SESSION['lock_until'] ?? 0);
 
     if (!csrf_valid()) {
-        $loginError = 'Oturum süresi doldu. Sayfayı yenileyip tekrar deneyin.';
+        $loginError = 'Oturum süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin.';
     } elseif ($lockedUntil > time()) {
-        $loginError = 'Çok fazla hatalı deneme. ' . ceil(($lockedUntil - time()) / 60) . ' dakika sonra tekrar deneyin.';
+        $loginError = 'Çok fazla hatalı deneme. Lütfen ' . ceil(($lockedUntil - time()) / 60) . ' dakika sonra tekrar deneyin.';
     } else {
         $user = is_string($_POST['username'] ?? null) ? $_POST['username'] : '';
         $pass = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
 
-        // Her iki kontrol de çalışır: kullanıcı adı yanlış olsa bile süre farkı sızmaz.
         $userOk = hash_equals(ADMIN_USER, $user);
         $passOk = password_verify($pass, ADMIN_PASSWORD_HASH);
 
@@ -85,7 +79,7 @@ if ($action === 'login') {
             $_SESSION['lock_until'] = time() + LOCK_SECONDS;
             $_SESSION['login_fails'] = 0;
         }
-        $loginError = 'Kullanıcı adı veya şifre hatalı.';
+        $loginError = 'Geçersiz kullanıcı adı veya şifre.';
     }
 }
 
@@ -119,22 +113,40 @@ if ($action === 'status') {
     if (!csrf_valid()) {
         flash('err', 'Güvenlik doğrulaması başarısız. Tekrar deneyin.');
     } elseif ($id === false || $id < 1 || !array_key_exists($status, STATUSES)) {
-        flash('err', 'Geçersiz istek.');
+        flash('err', 'Geçersiz talep.');
     } else {
         $stmt = db()->prepare('UPDATE leads SET status = :status WHERE id = :id');
         $stmt->execute([':status' => $status, ':id' => $id]);
-        flash('ok', "#{$id} numaralı kayıt “" . STATUSES[$status] . '” olarak güncellendi.');
+        flash('ok', "#{$id} numaralı talep “" . STATUSES[$status] . '” olarak güncellendi.');
     }
     redirect($back);
 }
 
+// CSV Export Action
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+    if (!is_logged_in()) {
+        redirect('admin.php');
+    }
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=dovye_leads_' . date('Y-m-d') . '.csv');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['ID', 'Ad Soyad', 'E-Posta', 'Hizmet', 'Mesaj', 'Durum', 'IP', 'Tarih']);
+    $rows = db()->query('SELECT id, name, email, service, message, status, ip_address, created_at FROM leads ORDER BY id DESC');
+    while ($row = $rows->fetch()) {
+        $row['service'] = SERVICES[$row['service']] ?? $row['service'];
+        $row['status'] = STATUSES[$row['status']] ?? $row['status'];
+        fputcsv($output, $row);
+    }
+    fclose($output);
+    exit;
+}
+
 // ---------------------------------------------------------------------------
-// Giriş ekranı
+// Login Screen
 // ---------------------------------------------------------------------------
 
 if (!is_logged_in()) {
     if (($_SESSION['admin'] ?? false) === true) {
-        // Zaman aşımı: eski oturumu temizle
         $_SESSION = [];
         $loginError ??= 'Oturum süreniz doldu. Lütfen tekrar giriş yapın.';
     }
@@ -145,29 +157,42 @@ if (!is_logged_in()) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>Yönetici girişi</title>
+    <title>Yönetici Paneli — DOVYE Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="glow-bg"><div class="glow-orb glow-1"></div></div>
 <main class="login">
-    <div class="card">
-        <h1>Yönetici girişi</h1>
-        <p class="muted">Müşteri adaylarını görmek için giriş yapın.</p>
+    <div class="card login-card">
+        <div class="login-brand">
+            <span class="logo-icon">◇</span>
+            <span>DOVYE Core</span>
+        </div>
+        <h1>Yönetim Merkezi</h1>
+        <p class="muted">Devam etmek için yönetici kimliğinizle doğrulama yapın.</p>
+
         <?php if ($loginError): ?>
             <div class="alert alert--err" role="alert"><?= e($loginError) ?></div>
         <?php endif; ?>
+
         <form method="post" action="admin.php">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="login">
             <div class="field">
-                <label for="username">Kullanıcı adı</label>
-                <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+                <label for="username">Kullanıcı Adı</label>
+                <input type="text" id="username" name="username" autocomplete="username" required autofocus placeholder="admin">
             </div>
             <div class="field">
                 <label for="password">Şifre</label>
-                <input type="password" id="password" name="password" autocomplete="current-password" required>
+                <input type="password" id="password" name="password" autocomplete="current-password" required placeholder="••••••••">
             </div>
-            <button type="submit" class="btn">Giriş yap</button>
+            <button type="submit" class="btn btn--primary btn--full">
+                <span>Giriş Yap</span>
+            </button>
         </form>
     </div>
 </main>
@@ -178,27 +203,27 @@ if (!is_logged_in()) {
 }
 
 // ---------------------------------------------------------------------------
-// Panel verileri
+// Main Dashboard Data
 // ---------------------------------------------------------------------------
 
 $pdo = db();
 $filters = read_filters($_GET);
 
-// Özet sayılar
+// Overview Stats
 $byStatus = array_fill_keys(array_keys(STATUSES), 0);
 foreach ($pdo->query('SELECT status, COUNT(*) AS c FROM leads GROUP BY status') as $row) {
     $byStatus[$row['status']] = (int) $row['c'];
 }
 $total = array_sum($byStatus);
 
-// Servis dağılımı
+// Service Distribution
 $byService = [];
 foreach ($pdo->query('SELECT service, COUNT(*) AS c FROM leads GROUP BY service ORDER BY c DESC') as $row) {
     $byService[$row['service']] = (int) $row['c'];
 }
 $maxService = $byService ? max($byService) : 1;
 
-// Son 7 gün
+// Last 7 days
 $perDay = [];
 for ($i = 6; $i >= 0; $i--) {
     $perDay[(new DateTimeImmutable("-{$i} days"))->format('Y-m-d')] = 0;
@@ -213,7 +238,7 @@ foreach ($stmt as $row) {
 $last7 = array_sum($perDay);
 $maxDay = max(1, max($perDay));
 
-// Liste (filtre + arama + sayfalama) — tamamı prepared statement
+// Filtered List
 $where = [];
 $params = [];
 if ($filters['status'] !== '') {
@@ -222,7 +247,6 @@ if ($filters['status'] !== '') {
 }
 if ($filters['q'] !== '') {
     $like = '%' . addcslashes($filters['q'], '%_\\') . '%';
-    // Native prepared statement'ta aynı adlı parametre tekrar kullanılamaz → q1/q2/q3
     $where[] = '(name LIKE :q1 OR email LIKE :q2 OR message LIKE :q3)';
     $params[':q1'] = $params[':q2'] = $params[':q3'] = $like;
 }
@@ -237,7 +261,7 @@ $filters['page'] = min($filters['page'], $pages);
 $offset = ($filters['page'] - 1) * PER_PAGE;
 
 $listStmt = $pdo->prepare(
-    'SELECT id, name, email, service, message, status, created_at
+    'SELECT id, name, email, service, message, status, ip_address, created_at
      FROM leads' . $whereSql . ' ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset'
 );
 foreach ($params as $k => $v) {
@@ -257,14 +281,30 @@ $tabFilter = static fn (string $s): array => ['status' => $s, 'q' => $filters['q
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>Müşteri &amp; Analytics</title>
+    <title>Müşteri & Analytics Paneli — DOVYE Core</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="admin-body">
+
 <header class="topbar">
-    <strong>Müşteri &amp; Analytics</strong>
+    <div class="topbar__left">
+        <span class="logo-icon">◇</span>
+        <strong>DOVYE<span>CORE</span></strong>
+        <span class="version-badge">v2.4.0</span>
+    </div>
     <div class="topbar__right">
-        <span class="who"><?= e(ADMIN_USER) ?></span>
+        <a href="admin.php?export=csv" class="btn btn--ghost btn--sm export-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <span>Dışa Aktar (CSV)</span>
+        </a>
+        <div class="user-pill">
+            <span class="online-indicator"></span>
+            <span class="who"><?= e(ADMIN_USER) ?></span>
+        </div>
         <form method="post" action="admin.php">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="logout">
@@ -275,40 +315,76 @@ $tabFilter = static fn (string $s): array => ['status' => $s, 'q' => $filters['q
 
 <main class="container">
     <?php if ($flash): ?>
-        <div class="alert alert--<?= $flash['type'] === 'ok' ? 'ok' : 'err' ?>" role="status"><?= e($flash['message']) ?></div>
+        <div class="alert alert--<?= $flash['type'] === 'ok' ? 'ok' : 'err' ?>" role="status">
+            <span><?= $flash['type'] === 'ok' ? '✅' : '⚠️' ?></span>
+            <div><?= e($flash['message']) ?></div>
+        </div>
     <?php endif; ?>
 
-    <section class="stats" aria-label="Özet">
-        <div class="card stat"><span class="stat__label">Toplam aday</span><span class="stat__value"><?= $total ?></span></div>
-        <div class="card stat stat--new"><span class="stat__label">Yeni</span><span class="stat__value"><?= $byStatus['new'] ?></span></div>
-        <div class="card stat"><span class="stat__label">Okundu</span><span class="stat__value"><?= $byStatus['read'] ?></span></div>
-        <div class="card stat stat--contacted"><span class="stat__label">İletişime geçildi</span><span class="stat__value"><?= $byStatus['contacted'] ?></span></div>
-        <div class="card stat"><span class="stat__label">Son 7 gün</span><span class="stat__value"><?= $last7 ?></span></div>
+    <!-- Stat Cards -->
+    <section class="stats" aria-label="Özet Metrikler">
+        <div class="card stat">
+            <span class="stat__label">Toplam Müşteri</span>
+            <span class="stat__value"><?= $total ?></span>
+            <span class="stat__sub">Tüm zamanlar</span>
+        </div>
+        <div class="card stat stat--new">
+            <span class="stat__label">Bekleyen (Yeni)</span>
+            <span class="stat__value"><?= $byStatus['new'] ?></span>
+            <span class="stat__sub">Yanıtlama bekleniyor</span>
+        </div>
+        <div class="card stat stat--read">
+            <span class="stat__label">İncelenen</span>
+            <span class="stat__value"><?= $byStatus['read'] ?></span>
+            <span class="stat__sub">İşlemde</span>
+        </div>
+        <div class="card stat stat--contacted">
+            <span class="stat__label">Tamamlanan</span>
+            <span class="stat__value"><?= $byStatus['contacted'] ?></span>
+            <span class="stat__sub">Geri dönüş yapıldı</span>
+        </div>
+        <div class="card stat">
+            <span class="stat__label">Son 7 Gün</span>
+            <span class="stat__value"><?= $last7 ?></span>
+            <span class="stat__sub">Haftalık hacim</span>
+        </div>
     </section>
 
+    <!-- Visual Insights -->
     <section class="insights">
-        <div class="card">
-            <h2>Son 7 günde gelen adaylar</h2>
+        <div class="card insight-card">
+            <div class="insight-header">
+                <h3>Son 7 Günlük Talep Trendi</h3>
+                <span class="tag">Canlı Veri</span>
+            </div>
             <ul class="bars">
                 <?php foreach ($perDay as $day => $count): ?>
                     <li>
-                        <span><?= e(date('d.m', strtotime($day))) ?></span>
-                        <progress max="<?= $maxDay ?>" value="<?= $count ?>"></progress>
+                        <span class="day-label"><?= e(date('d M', strtotime($day))) ?></span>
+                        <div class="progress-wrap">
+                            <progress max="<?= $maxDay ?>" value="<?= $count ?>"></progress>
+                        </div>
                         <span class="num"><?= $count ?></span>
                     </li>
                 <?php endforeach; ?>
             </ul>
         </div>
-        <div class="card">
-            <h2>Hizmet türüne göre dağılım</h2>
+
+        <div class="card insight-card">
+            <div class="insight-header">
+                <h3>Hizmet Kategorisi Dağılımı</h3>
+                <span class="tag">Segmentasyon</span>
+            </div>
             <?php if (!$byService): ?>
-                <p class="empty">Henüz veri yok.</p>
+                <p class="empty">Henüz kaydedilmiş bir veri bulunmuyor.</p>
             <?php else: ?>
                 <ul class="bars">
                     <?php foreach ($byService as $key => $count): ?>
                         <li>
-                            <span><?= e(SERVICES[$key] ?? $key) ?></span>
-                            <progress max="<?= $maxService ?>" value="<?= $count ?>"></progress>
+                            <span class="day-label"><?= e(SERVICES[$key] ?? $key) ?></span>
+                            <div class="progress-wrap">
+                                <progress max="<?= $maxService ?>" value="<?= $count ?>"></progress>
+                            </div>
                             <span class="num"><?= $count ?></span>
                         </li>
                     <?php endforeach; ?>
@@ -317,20 +393,29 @@ $tabFilter = static fn (string $s): array => ['status' => $s, 'q' => $filters['q
         </div>
     </section>
 
-    <section aria-label="Müşteri adayları">
-        <div class="filters">
-            <nav class="tabs" aria-label="Duruma göre filtre">
-                <a href="<?= e(admin_url($tabFilter(''))) ?>" <?= $filters['status'] === '' ? 'aria-current="true"' : '' ?>>Tümü</a>
+    <!-- Table Section -->
+    <section class="data-section" aria-label="Müşteri adayları listesi">
+        <div class="filters-bar">
+            <nav class="tabs" aria-label="Filtreler">
+                <a href="<?= e(admin_url($tabFilter(''))) ?>" <?= $filters['status'] === '' ? 'aria-current="true"' : '' ?>>
+                    Tümü <span class="tab-count"><?= $total ?></span>
+                </a>
                 <?php foreach (STATUSES as $key => $label): ?>
-                    <a href="<?= e(admin_url($tabFilter($key))) ?>" <?= $filters['status'] === $key ? 'aria-current="true"' : '' ?>><?= e($label) ?></a>
+                    <a href="<?= e(admin_url($tabFilter($key))) ?>" <?= $filters['status'] === $key ? 'aria-current="true"' : '' ?>>
+                        <?= e($label) ?> <span class="tab-count"><?= $byStatus[$key] ?></span>
+                    </a>
                 <?php endforeach; ?>
             </nav>
-            <form class="search" method="get" action="admin.php" role="search">
+
+            <form class="search-form" method="get" action="admin.php" role="search">
                 <?php if ($filters['status'] !== ''): ?>
                     <input type="hidden" name="status" value="<?= e($filters['status']) ?>">
                 <?php endif; ?>
-                <input type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="İsim, e-posta, mesaj…" aria-label="Ara" maxlength="100">
-                <button type="submit" class="btn btn--sm">Ara</button>
+                <div class="search-input-wrap">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="İsim, e-posta veya içerik ara…" aria-label="Ara">
+                </div>
+                <button type="submit" class="btn btn--secondary btn--sm">Ara</button>
             </form>
         </div>
 
@@ -338,52 +423,78 @@ $tabFilter = static fn (string $s): array => ['status' => $s, 'q' => $filters['q
             <table>
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Kişi</th>
+                        <th style="width: 60px;">ID</th>
+                        <th>Müşteri</th>
                         <th>Hizmet</th>
-                        <th>Mesaj</th>
+                        <th>Mesaj / Detay</th>
                         <th>Tarih</th>
                         <th>Durum</th>
-                        <th>İşlem</th>
+                        <th style="text-align: right;">İşlemler</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (!$leads): ?>
-                    <tr><td colspan="7" class="empty">Bu filtreyle eşleşen kayıt yok.</td></tr>
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <span class="empty-icon">📂</span>
+                            <p>Aradığınız kriterlere uygun kayıt bulunamadı.</p>
+                        </td>
+                    </tr>
                 <?php endif; ?>
                 <?php foreach ($leads as $lead): ?>
                     <?php
                     $msg = (string) $lead['message'];
-                    $short = mb_strlen($msg) > 80 ? mb_substr($msg, 0, 80) . '…' : $msg;
+                    $short = mb_strlen($msg) > 75 ? mb_substr($msg, 0, 75) . '…' : $msg;
                     ?>
                     <tr>
-                        <td class="nowrap"><?= (int) $lead['id'] ?></td>
+                        <td class="id-cell">#<?= (int) $lead['id'] ?></td>
                         <td>
-                            <strong><?= e($lead['name']) ?></strong><br>
-                            <a class="sub" href="mailto:<?= e($lead['email']) ?>"><?= e($lead['email']) ?></a>
+                            <div class="user-info">
+                                <strong class="user-name"><?= e($lead['name']) ?></strong>
+                                <a class="user-email" href="mailto:<?= e($lead['email']) ?>">
+                                    <?= e($lead['email']) ?>
+                                </a>
+                            </div>
                         </td>
-                        <td class="nowrap"><?= e(SERVICES[$lead['service']] ?? $lead['service']) ?></td>
-                        <td class="msg">
-                            <details>
+                        <td>
+                            <span class="service-pill"><?= e(SERVICES[$lead['service']] ?? $lead['service']) ?></span>
+                        </td>
+                        <td class="msg-cell">
+                            <details class="msg-accordion">
                                 <summary><?= e($short) ?></summary>
-                                <p><?= e($msg) ?></p>
+                                <div class="msg-full">
+                                    <p><?= e($msg) ?></p>
+                                    <div class="msg-meta">IP: <?= e($lead['ip_address'] ?? 'Gizli') ?></div>
+                                </div>
                             </details>
                         </td>
-                        <td class="nowrap"><?= e(date('d.m.Y H:i', strtotime((string) $lead['created_at']))) ?></td>
-                        <td><span class="badge badge--<?= e($lead['status']) ?>"><?= e(STATUSES[$lead['status']] ?? $lead['status']) ?></span></td>
+                        <td class="nowrap date-cell">
+                            <?= e(date('d.m.Y', strtotime((string) $lead['created_at']))) ?>
+                            <small><?= e(date('H:i', strtotime((string) $lead['created_at']))) ?></small>
+                        </td>
                         <td>
-                            <form class="actions" method="post" action="admin.php">
+                            <span class="badge badge--<?= e($lead['status']) ?>">
+                                <?= e(STATUSES[$lead['status']] ?? $lead['status']) ?>
+                            </span>
+                        </td>
+                        <td style="text-align: right;">
+                            <form class="actions-group" method="post" action="admin.php">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="status">
                                 <input type="hidden" name="id" value="<?= (int) $lead['id'] ?>">
                                 <input type="hidden" name="f_status" value="<?= e($filters['status']) ?>">
                                 <input type="hidden" name="f_q" value="<?= e($filters['q']) ?>">
                                 <input type="hidden" name="f_page" value="<?= (int) $filters['page'] ?>">
-                                <?php foreach (['read' => 'Okundu', 'contacted' => 'İletişime Geçildi', 'new' => 'Yeniye al'] as $key => $label): ?>
-                                    <?php if ($lead['status'] !== $key): ?>
-                                        <button type="submit" name="status" value="<?= e($key) ?>" class="btn btn--ghost btn--sm"><?= e($label) ?></button>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
+                                
+                                <?php if ($lead['status'] !== 'read'): ?>
+                                    <button type="submit" name="status" value="read" class="btn btn--action" title="İncelendi İşaretle">👁️</button>
+                                <?php endif; ?>
+                                <?php if ($lead['status'] !== 'contacted'): ?>
+                                    <button type="submit" name="status" value="contacted" class="btn btn--action btn--success" title="İletişime Geçildi">✅</button>
+                                <?php endif; ?>
+                                <?php if ($lead['status'] !== 'new'): ?>
+                                    <button type="submit" name="status" value="new" class="btn btn--action" title="Yeniye Al">🔄</button>
+                                <?php endif; ?>
                             </form>
                         </td>
                     </tr>
@@ -392,14 +503,20 @@ $tabFilter = static fn (string $s): array => ['status' => $s, 'q' => $filters['q
             </table>
         </div>
 
-        <div class="pager">
-            <span><?= $matched ?> kayıt · sayfa <?= $filters['page'] ?>/<?= $pages ?></span>
-            <span class="links">
-                <a class="btn btn--ghost btn--sm <?= $filters['page'] <= 1 ? 'disabled' : '' ?>"
-                   href="<?= e(admin_url([...$filters, 'page' => $filters['page'] - 1])) ?>">← Önceki</a>
-                <a class="btn btn--ghost btn--sm <?= $filters['page'] >= $pages ? 'disabled' : '' ?>"
-                   href="<?= e(admin_url([...$filters, 'page' => $filters['page'] + 1])) ?>">Sonraki →</a>
+        <div class="pager-bar">
+            <span class="pager-info">
+                Toplam <strong><?= $matched ?></strong> kayıttan <strong><?= $offset + 1 ?>-<?= min($offset + PER_PAGE, $matched) ?></strong> arası gösteriliyor (Sayfa <?= $filters['page'] ?>/<?= $pages ?>)
             </span>
+            <div class="pager-controls">
+                <a class="btn btn--ghost btn--sm <?= $filters['page'] <= 1 ? 'disabled' : '' ?>"
+                   href="<?= e(admin_url([...$filters, 'page' => $filters['page'] - 1])) ?>">
+                    ← Önceki
+                </a>
+                <a class="btn btn--ghost btn--sm <?= $filters['page'] >= $pages ? 'disabled' : '' ?>"
+                   href="<?= e(admin_url([...$filters, 'page' => $filters['page'] + 1])) ?>">
+                    Sonraki →
+                </a>
+            </div>
         </div>
     </section>
 </main>
