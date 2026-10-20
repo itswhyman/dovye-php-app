@@ -2,36 +2,35 @@
 declare(strict_types=1);
 
 /**
- * DOVYE Studio — Core Engine & Environment Setup
+ * DOVYE STUDIO — Cyber Core Engine & Global Config
  */
 
-// ---- Environment Variables ------------------------------------------------
 define('DB_HOST', getenv('DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'dovye-mysql'));
 define('DB_PORT', getenv('DB_PORT') ?: (getenv('MYSQL_PORT') ?: '3306'));
 define('DB_NAME', getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: (getenv('MYSQL_DATABASE') ?: 'lead_panel')));
 define('DB_USER', getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: (getenv('MYSQL_USER') ?: 'root')));
 define('DB_PASS', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: (getenv('MYSQL_PASSWORD') ?: '')));
 
-define('ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
-define('ADMIN_PASSWORD_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh33BfhAMO2Y4.hk/qQFlv6doCLZASlWGP1zHZGtO3ioi');
+define('DEFAULT_ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
+define('DEFAULT_ADMIN_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh33BfhAMO2Y4.hk/qQFlv6doCLZASlWGP1zHZGtO3ioi');
 
 const SERVICES = [
-    'web'       => 'Web & Web3 Development',
-    'mobile'    => 'iOS & Android App Suite',
-    'cloud'     => 'DevOps & Cloud Architecture',
-    'uiux'      => 'UI/UX Design System',
-    'consult'   => 'Teknoloji Danışmanlığı',
+    'cyber_dev'  => 'Next-Gen Web Apps & Platforms',
+    'ui_design'  => 'Cyberpunk & Futuristic UI/UX',
+    'cloud_ops'  => 'DevOps & Docker Cluster Engine',
+    'ai_models'  => 'AI Integration & Neural Pipeline',
+    'security'   => 'Penetration Test & Audit'
 ];
 
 const STATUSES = [
     'new'       => 'Yeni Aday',
     'read'      => 'İncelendi',
-    'contacted' => 'İletişime Geçildi',
+    'contacted' => 'İletişime Geçildi'
 ];
 
 date_default_timezone_set('Europe/Istanbul');
 
-// ---- Security Headers ---------------------------------------------------
+// Headers & Session
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -47,11 +46,11 @@ if (session_status() === PHP_SESSION_NONE) {
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
-    session_name('dovye_session');
+    session_name('dovye_cyber_session');
     session_start();
 }
 
-// ---- PDO Connection Helper ----------------------------------------------
+// Database Connection
 function db(): ?PDO
 {
     static $pdo = null;
@@ -76,6 +75,32 @@ function db(): ?PDO
         error_log('DB Error: ' . $e->getMessage());
         return null;
     }
+}
+
+// System Logger Helper
+function log_system_action(string $action, string $details = ''): void
+{
+    $pdo = db();
+    if (!$pdo) return;
+    try {
+        $stmt = $pdo->prepare('INSERT INTO system_logs (action, details, ip_address) VALUES (:act, :det, :ip)');
+        $stmt->execute([
+            ':act' => $action,
+            ':det' => $details,
+            ':ip'  => client_ip()
+        ]);
+    } catch (Throwable $t) {
+        error_log('Log error: ' . $t->getMessage());
+    }
+}
+
+// Extract YouTube ID
+function parse_youtube_id(string $url): ?string
+{
+    if (preg_match('/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\x2F|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i', $url, $match)) {
+        return $match[1];
+    }
+    return null;
 }
 
 function e(?string $value): string

@@ -1,3 +1,3 @@
-# DOVYE Studio — Master PHP OS v2.5
+# DOVYE STUDIO — Ultimate Cyber Core OS v3.0
 
-Yüksek performanslı, SVG ikonlu, multi-page admin sistemli PHP 8.3 & MariaDB web altyapısı.
+Radikal baklava/polygon Navbar tasarımlı, YouTube medya motorlu ve canlı dünya kameraları destekli tam teşekküllü web yazılımı.

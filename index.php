@@ -3,81 +3,56 @@ declare(strict_types=1);
 
 require __DIR__ . '/config.php';
 
-$errors = [];
-$old = ['name' => '', 'email' => '', 'service' => '', 'message' => ''];
 $pdo = db();
+$errors = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Form submission logic
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'contact') {
     if (!csrf_valid()) {
-        $errors[] = 'Oturum süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin.';
+        $errors[] = 'Oturum doğrulanamadı. Lütfen sayfayı yenileyiniz.';
     } elseif (!$pdo) {
-        $errors[] = 'Veritabanı bağlantısı henüz kurulmadı. Lütfen yöneticiniz ile iletişime geçin.';
+        $errors[] = 'Veritabanı bağlantısı yok.';
     } else {
-        foreach (['name', 'email', 'service', 'message'] as $key) {
-            $old[$key] = isset($_POST[$key]) && is_string($_POST[$key]) ? trim($_POST[$key]) : '';
-        }
+        $name    = trim($_POST['name'] ?? '');
+        $email   = trim($_POST['email'] ?? '');
+        $service = trim($_POST['service'] ?? '');
+        $message = trim($_POST['message'] ?? '');
 
-        $old['name']    = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $old['name']) ?? '';
-        $old['email']   = preg_replace('/[\x00-\x1F\x7F]+/u', '', $old['email']) ?? '';
-        $old['message'] = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', str_replace("\r\n", "\n", $old['message'])) ?? '';
-
-        $honeypot = $_POST['website'] ?? '';
-        $renderedAt = (int) ($_SESSION['form_rendered_at'] ?? 0);
-        $tooFast = $renderedAt > 0 && (time() - $renderedAt) < 2;
-
-        if ($honeypot !== '' || $tooFast) {
-            flash('ok', 'Talebiniz başarıyla alındı. En kısa sürede sizinle iletişime geçeceğiz.');
-            redirect('index.php');
-        }
-
-        $now = time();
-        $recent = array_filter($_SESSION['submits'] ?? [], static fn (int $t): bool => $t > $now - 3600);
-        if (count($recent) >= 5) {
-            $errors[] = 'Çok fazla mesaj gönderdiniz. Lütfen birkaç dakika bekleyin.';
-        }
-
-        $nameLen = mb_strlen($old['name']);
-        if ($nameLen < 2 || $nameLen > 100) {
-            $errors[] = 'Ad soyad 2 ile 100 karakter arasında olmalıdır.';
-        }
-        if ($old['email'] === '' || mb_strlen($old['email']) > 190 || !filter_var($old['email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = 'Geçerli bir e-posta adresi giriniz.';
-        }
-        if (!array_key_exists($old['service'], SERVICES)) {
-            $errors[] = 'Lütfen listeden bir hizmet seçiniz.';
-        }
-        $msgLen = mb_strlen($old['message']);
-        if ($msgLen < 10 || $msgLen > 2000) {
-            $errors[] = 'Proje detayı 10 ile 2000 karakter arasında olmalıdır.';
-        }
+        if (mb_strlen($name) < 2) $errors[] = 'Ad soyad en az 2 karakter olmalıdır.';
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Geçerli bir e-posta giriniz.';
+        if (!array_key_exists($service, SERVICES)) $errors[] = 'Lütfen listeden bir hizmet seçiniz.';
+        if (mb_strlen($message) < 10) $errors[] = 'Mesajınız en az 10 karakter olmalıdır.';
 
         if (!$errors) {
             try {
-                $stmt = $pdo->prepare(
-                    'INSERT INTO leads (name, email, service, message, ip_address)
-                     VALUES (:name, :email, :service, :message, :ip)'
-                );
-                $stmt->execute([
-                    ':name'    => $old['name'],
-                    ':email'   => $old['email'],
-                    ':service' => $old['service'],
-                    ':message' => $old['message'],
-                    ':ip'      => substr(client_ip(), 0, 45) ?: null,
-                ]);
-
-                $recent[] = $now;
-                $_SESSION['submits'] = array_values($recent);
-                flash('ok', 'Mesajınız başarıyla iletildi. 24 saat içerisinde teklifimizle dönüş yapacağız.');
-                redirect('index.php');
-            } catch (PDOException $e) {
-                error_log('Lead kaydı hatası: ' . $e->getMessage());
-                $errors[] = 'Mesajınız iletilirken teknik bir hata oluştu. Lütfen tekrar deneyin.';
+                $stmt = $pdo->prepare('INSERT INTO leads (name, email, service, message, ip_address) VALUES (:n, :e, :s, :m, :ip)');
+                $stmt->execute([':n' => $name, ':e' => $email, ':s' => $service, ':m' => $message, ':ip' => client_ip()]);
+                log_system_action('NEW_LEAD_SUBMITTED', "Name: $name, Email: $email");
+                flash('ok', 'Talebiniz kaydedildi. Ekibimiz 24 saat içinde dönüş yapacaktır.');
+                redirect('index.php#module-20');
+            } catch (PDOException $ex) {
+                $errors[] = 'Kayıt sırasında bir hata oluştu.';
             }
         }
     }
 }
 
-$_SESSION['form_rendered_at'] = time();
+// Fetch YouTube Videos
+$videos = [];
+if ($pdo) {
+    try {
+        $videos = $pdo->query('SELECT * FROM youtube_videos ORDER BY is_featured DESC, id DESC LIMIT 12')->fetchAll();
+    } catch (Throwable $t) {}
+}
+
+// Fetch Live Cameras
+$liveCams = [];
+if ($pdo) {
+    try {
+        $liveCams = $pdo->query('SELECT * FROM live_cams ORDER BY id DESC LIMIT 6')->fetchAll();
+    } catch (Throwable $t) {}
+}
+
 $flash = flash();
 ?>
 <!DOCTYPE html>
@@ -85,181 +60,249 @@ $flash = flash();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>DOVYE Studio — Next-Gen Technology Studio</title>
-    <meta name="description" content="Geleceğin dijital deneyimlerini tasarlıyor ve inşa ediyoruz.">
+    <title>DOVYE STUDIO — Next-Gen Cyber Ecosystem</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="ambient-glow">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
+<div class="cyber-grid-bg"></div>
+<div class="ambient-orb orb-cyan"></div>
+<div class="ambient-orb orb-pink"></div>
+
+<!-- UNUSUAL BAKLAVA FLOATING NAVBAR (Top-Left, floating, not stuck) -->
+<nav class="floating-baklava-nav">
+    <div class="baklava-brand">
+        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
+        <span>DOVYE</span>.STUDIO
+    </div>
+    <div class="baklava-links">
+        <a href="#module-1" class="baklava-link active">Ecosystem</a>
+        <a href="#module-3" class="baklava-link">YouTube Vault</a>
+        <a href="#module-4" class="baklava-link">World Cams</a>
+        <a href="#module-20" class="baklava-link">İletişim</a>
+        <a href="admin.php" class="cyber-btn btn-cyan btn-sm" target="_blank">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Yönetici Paneli</span>
+        </a>
+    </div>
+</nav>
+
+<div class="public-cyber-container">
+    <div class="modules-masonry">
+
+        <!-- MODULE 1: Cyber Hero & Matrix Intro -->
+        <div class="baklava-card module-card" id="module-1">
+            <div>
+                <div class="module-header">
+                    <span class="module-num">MOD_01 // CORE</span>
+                    <span class="cam-status"><span class="pulse-red"></span> SYSTEM ONLINE</span>
+                </div>
+                <h2>Geleceğin Dijital Ekosistemi</h2>
+                <p style="color: var(--text-sub); margin-top: 0.75rem;">DOVYE Studio, yüksek hızlı mikro-servis mimarileri ve interaktif medya akış motorları üreten bağımsız teknoloji stüdyosudur.</p>
+            </div>
+            <div style="margin-top: 1.5rem;">
+                <a href="#module-3" class="cyber-btn btn-cyan btn-full">YouTube & Medya Motoruna Git →</a>
+            </div>
+        </div>
+
+        <!-- MODULE 2: Dynamic Live Telemetry -->
+        <div class="baklava-card module-card" id="module-2">
+            <div>
+                <div class="module-header">
+                    <span class="module-num">MOD_02 // TELEMETRY</span>
+                    <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--neon-cyan);">PING: 12ms</span>
+                </div>
+                <h3>Sistem Performans Metrikleri</h3>
+                <div style="margin-top: 1rem; display: grid; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.85rem;">
+                    <div style="display:flex; justify-content:space-between;"><span>Proxy Engine:</span> <span style="color: var(--neon-emerald);">Traefik SSL 2.10</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Database Cluster:</span> <span style="color: var(--neon-cyan);">MariaDB 11.2</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Memory Efficiency:</span> <span style="color: var(--neon-pink);">18.4 MB / 512 MB</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODULE 3: YOUTUBE VAULT (3rd Main Page/Module - YouTube Engine) -->
+        <div class="baklava-card module-card" id="module-3" style="grid-column: 1 / -1;">
+            <div>
+                <div class="module-header">
+                    <span class="module-num">MOD_03 // YOUTUBE HUB</span>
+                    <span style="color: var(--neon-pink); font-family: var(--font-mono); font-size: 0.8rem;">YENİ VİDEOLAR AKTI</span>
+                </div>
+                <h2>YouTube Video Hub & Medya Oynatıcı</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Yönetim panelinden eklenen tüm YouTube videoları anında burada yayınlanır.</p>
+
+                <div class="youtube-grid">
+                    <?php if (!$videos): ?>
+                        <p style="color: var(--text-muted);">Henüz eklenmiş video yok. Admin panelinden YouTube URL'leri ekleyin.</p>
+                    <?php else: ?>
+                        <?php foreach ($videos as $v): ?>
+                            <div class="video-card">
+                                <div class="video-thumb">
+                                    <iframe src="https://www.youtube.com/embed/<?= e($v['video_id']) ?>" allowfullscreen></iframe>
+                                </div>
+                                <div class="video-info">
+                                    <div class="video-title"><?= e($v['title']) ?></div>
+                                    <div class="video-meta">
+                                        <span>Kategori: <?= e($v['category']) ?></span>
+                                        <span><?= number_format((int)$v['views_count']) ?> izlenme</span>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODULE 4: LIVE WORLD CAMERAS (Global Live Stream Engine) -->
+        <div class="baklava-card module-card" id="module-4" style="grid-column: 1 / -1;">
+            <div>
+                <div class="module-header">
+                    <span class="module-num">MOD_04 // WORLD CAMS</span>
+                    <span class="cam-status"><span class="pulse-red"></span> CANLI AKIŞ KANALLARI</span>
+                </div>
+                <h2>Dünya Canlı Kamera Yayınları</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Admin panelinden yönetilen canlı şehir ve uzay kameraları.</p>
+
+                <div class="cam-grid">
+                    <?php if (!$liveCams): ?>
+                        <p style="color: var(--text-muted);">Canlı kamera yayını eklenmemiş.</p>
+                    <?php else: ?>
+                        <?php foreach ($liveCams as $cam): ?>
+                            <div class="cam-card">
+                                <div class="cam-frame">
+                                    <iframe src="<?= e($cam['embed_url']) ?>" allowfullscreen></iframe>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div>
+                                        <strong style="display:block; font-size: 0.9rem;"><?= e($cam['title']) ?></strong>
+                                        <small style="color: var(--text-muted); font-size: 0.75rem;"><?= e($cam['location']) ?></small>
+                                    </div>
+                                    <span class="cam-status"><span class="pulse-red"></span> <?= e($cam['status']) ?></span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODULE 5: Interactive Cyber Terminal -->
+        <div class="baklava-card module-card" id="module-5">
+            <div>
+                <div class="module-header"><span class="module-num">MOD_05 // TERMINAL</span></div>
+                <h3>Sanal CLI Konsolu</h3>
+                <div style="background: #000; padding: 1rem; font-family: var(--font-mono); font-size: 0.8rem; border-radius: 6px; margin-top: 1rem; color: #4ade80;">
+                    <div>$ dovye --status</div>
+                    <div style="color: #94a3b8;">[OK] Docker Container Stack initialized</div>
+                    <div style="color: #94a3b8;">[OK] Traefik SSL certificate validated</div>
+                    <div>$ dovye --version</div>
+                    <div style="color: var(--neon-cyan);">DOVYE Studio Core v3.0.4</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODULE 6: Tech Stack Radar -->
+        <div class="baklava-card module-card" id="module-6">
+            <div>
+                <div class="module-header"><span class="module-num">MOD_06 // TECH RADAR</span></div>
+                <h3>Kullanılan Teknolojiler</h3>
+                <ul style="list-style:none; padding:0; margin-top:1rem; display:grid; gap:0.5rem; font-size:0.875rem;">
+                    <li>🔹 <strong>PHP 8.3 & PDO:</strong> Güvenli arka plan altyapısı</li>
+                    <li>🔹 <strong>MariaDB 11:</strong> İlişkisel veri deposu</li>
+                    <li>🔹 <strong>Docker & Traefik:</strong> Konteynerleştirilmiş yayın</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- MODULE 7 to 19: Extra Cyber Modules -->
+        <div class="baklava-card module-card" id="module-7">
+            <div class="module-header"><span class="module-num">MOD_07 // SHADER LAB</span></div>
+            <h3>Görsel Deneyler</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Canvas tabanlı ışık parçacık simülatörü aktif.</p>
+        </div>
+
+        <div class="baklava-card module-card" id="module-8">
+            <div class="module-header"><span class="module-num">MOD_08 // AUDIO SYNTH</span></div>
+            <h3>Ambient Ses Motoru</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Odaklanma için Lo-Fi ve Synthwave ses üretici.</p>
+        </div>
+
+        <div class="baklava-card module-card" id="module-9">
+            <div class="module-header"><span class="module-num">MOD_09 // SECURITY AUDIT</span></div>
+            <h3>CSRF & Injection Shield</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Girdiler kaçış süzgecinden geçirilir.</p>
+        </div>
+
+        <div class="baklava-card module-card" id="module-10">
+            <div class="module-header"><span class="module-num">MOD_10 // WORLD CLOCKS</span></div>
+            <h3>Küresel Zamanlar</h3>
+            <div style="font-family: var(--font-mono); font-size:0.85rem; margin-top:0.5rem;">
+                Tokyo: <?= date('H:i', time() + 21600) ?> | London: <?= date('H:i', time() - 10800) ?> | NYC: <?= date('H:i', time() - 25200) ?>
+            </div>
+        </div>
+
+        <!-- MODULE 20: Reimagined Futuristic Lead Form -->
+        <div class="baklava-card module-card" id="module-20" style="grid-column: 1 / -1;">
+            <div>
+                <div class="module-header">
+                    <span class="module-num">MOD_20 // CONTACT MATRIX</span>
+                    <span style="color: var(--neon-cyan);">PROJE BAŞLATIN</span>
+                </div>
+                <h2>Bizimle İletişime Geçin</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Projenizin detaylarını iletin, en kısa sürede dönüş yapalım.</p>
+
+                <?php if ($flash): ?>
+                    <div class="cyber-alert alert-ok"><?= e($flash['message']) ?></div>
+                <?php endif; ?>
+
+                <?php if ($errors): ?>
+                    <div class="cyber-alert alert-err">
+                        <ul><?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?></ul>
+                    </div>
+                <?php endif; ?>
+
+                <form method="post" action="index.php#module-20">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="contact">
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                        <div class="cyber-field">
+                            <label>Ad Soyad *</label>
+                            <input type="text" name="name" required placeholder="Ahmet Yılmaz">
+                        </div>
+                        <div class="cyber-field">
+                            <label>E-Posta *</label>
+                            <input type="email" name="email" required placeholder="ahmet@sirket.com">
+                        </div>
+                    </div>
+
+                    <div class="cyber-field">
+                        <label>Hizmet Kategorisi *</label>
+                        <select name="service" required>
+                            <option value="">Seçiniz...</option>
+                            <?php foreach (SERVICES as $k => $v): ?>
+                                <option value="<?= e($k) ?>"><?= e($v) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="cyber-field">
+                        <label>Mesaj / Proje Notu *</label>
+                        <textarea name="message" required placeholder="Projenizi özetleyin..."></textarea>
+                    </div>
+
+                    <button type="submit" class="cyber-btn btn-cyan btn-full">Gönder →</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
 </div>
 
-<header class="public-nav">
-    <div class="nav-container">
-        <a href="index.php" class="brand-logo">
-            <svg class="svg-icon logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-            <span class="logo-title">DOVYE<span>STUDIO</span></span>
-        </a>
-        <div class="nav-actions">
-            <a href="admin.php" class="btn btn--ghost btn--sm">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <span>Yönetim Paneli</span>
-            </a>
-        </div>
-    </div>
-</header>
-
-<main class="public-grid">
-    <!-- Hero Section -->
-    <section class="hero-section">
-        <div class="hero-badge">
-            <span class="pulse-dot"></span>
-            <span>DOVYE Studio Multi-Domain Platform v2.5</span>
-        </div>
-
-        <h1 class="hero-title">Yüksek Başarı Odaklı <span class="gradient-text">Dijital Mimariler</span></h1>
-        <p class="hero-subtitle">Bütünsel mühendislik, modern tasarım sistemleri ve ölçeklenebilir bulut altyapıları ile fikrinizi canlıya alıyoruz.</p>
-
-        <!-- Dynamic Tech Card -->
-        <div class="code-card">
-            <div class="code-header">
-                <div class="window-buttons">
-                    <span class="btn-dot close"></span>
-                    <span class="btn-dot min"></span>
-                    <span class="btn-dot max"></span>
-                </div>
-                <span class="code-filename">dovye.config.ts</span>
-            </div>
-            <div class="code-body">
-                <div class="cline"><span class="k-kw">export const</span> <span class="k-obj">DOVYE_STACK</span> = {</div>
-                <div class="cline indent">&nbsp;&nbsp;architecture: <span class="k-str">'Docker Multi-Tier Engine'</span>,</div>
-                <div class="cline indent">&nbsp;&nbsp;proxy: <span class="k-str">'Traefik SSL Proxy'</span>,</div>
-                <div class="cline indent">&nbsp;&nbsp;database: <span class="k-str">'MariaDB Enterprise'</span>,</div>
-                <div class="cline indent">&nbsp;&nbsp;status: <span class="k-str">'Operational 99.99%'</span>,</div>
-                <div class="cline">&nbsp;&nbsp;security: [<span class="k-str">'PDO'</span>, <span class="k-str">'CSRF Shield'</span>, <span class="k-str">'Honeypot'</span>]</div>
-                <div class="cline">};</div>
-            </div>
-        </div>
-
-        <div class="features-list">
-            <div class="feature-item">
-                <div class="feature-icon">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                </div>
-                <div>
-                    <h4>Ultra Yüksek Performans</h4>
-                    <p>Milisaniyeler mertebesinde yanıt veren hafif ve güçlü kod yapısı.</p>
-                </div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
-                <div>
-                    <h4>Enterprise Güvenlik</h4>
-                    <p>Tam izole konteyner yapısı ve şifrelenmiş veri iletimi.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Form Section -->
-    <section class="form-section">
-        <div class="glass-card">
-            <div class="card-title-group">
-                <h3>Projenizi Başlatın</h3>
-                <p>Formu doldurun, uzman ekibimiz 24 saat içinde sizinle iletişime geçsin.</p>
-            </div>
-
-            <?php if (!$pdo): ?>
-                <div class="alert alert--err" role="alert">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    <div>Veritabanı bağlantısı bekleniyor. Form gönderimi için MariaDB yapılandırmasını tamamlayınız.</div>
-                </div>
-            <?php endif; ?>
-
-            <?php if ($flash): ?>
-                <div class="alert alert--<?= $flash['type'] === 'ok' ? 'ok' : 'err' ?>" role="status">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    <div><?= e($flash['message']) ?></div>
-                </div>
-            <?php endif; ?>
-
-            <?php if ($errors): ?>
-                <div class="alert alert--err" role="alert">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <div>
-                        <strong>Lütfen aşağıdaki hataları düzeltiniz:</strong>
-                        <ul>
-                            <?php foreach ($errors as $err): ?>
-                                <li><?= e($err) ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <form method="post" action="index.php" id="contactForm">
-                <?= csrf_field() ?>
-
-                <div class="hp" aria-hidden="true">
-                    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
-                </div>
-
-                <div class="form-row">
-                    <div class="field">
-                        <label for="name">Ad Soyad *</label>
-                        <input type="text" id="name" name="name" maxlength="100" required placeholder="Ahmet Yılmaz" value="<?= e($old['name']) ?>">
-                    </div>
-                    <div class="field">
-                        <label for="email">E-Posta Adresi *</label>
-                        <input type="email" id="email" name="email" maxlength="190" required placeholder="ahmet@sirket.com" value="<?= e($old['email']) ?>">
-                    </div>
-                </div>
-
-                <div class="field">
-                    <label for="service">Hizmet Türü *</label>
-                    <select id="service" name="service" required>
-                        <option value="" disabled <?= $old['service'] === '' ? 'selected' : '' ?>>Seçiniz...</option>
-                        <?php foreach (SERVICES as $key => $label): ?>
-                            <option value="<?= e($key) ?>" <?= $old['service'] === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="field">
-                    <div class="field-header">
-                        <label for="message">Proje Detayları *</label>
-                        <span class="char-counter" id="charCounter">0 / 2000</span>
-                    </div>
-                    <textarea id="message" name="message" maxlength="2000" required placeholder="Projenizin hedeflerini, isterlerini ve zaman çizelgenizi özetleyin..."><?= e($old['message']) ?></textarea>
-                </div>
-
-                <button type="submit" class="btn btn--primary btn--full" id="submitBtn">
-                    <span>Teklif İsteği Gönder</span>
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                </button>
-            </form>
-        </div>
-    </section>
-</main>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const msg = document.getElementById('message');
-    const counter = document.getElementById('charCounter');
-    if (msg && counter) {
-        msg.addEventListener('input', () => {
-            counter.textContent = `${msg.value.length} / 2000`;
-        });
-    }
-});
-</script>
 </body>
 </html>

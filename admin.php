@@ -3,148 +3,185 @@ declare(strict_types=1);
 
 require __DIR__ . '/config.php';
 
-const IDLE_TIMEOUT = 1800;
-const MAX_FAILS    = 5;
-const LOCK_SECONDS = 300;
-const PER_PAGE     = 15;
-
-function read_filters(array $src, string $p = ''): array
-{
-    $status = $src[$p . 'status'] ?? '';
-    $status = (is_string($status) && array_key_exists($status, STATUSES)) ? $status : '';
-
-    $q = $src[$p . 'q'] ?? '';
-    $q = is_string($q) ? mb_substr(trim($q), 0, 100) : '';
-
-    $page = $src[$p . 'page'] ?? 1;
-    $page = max(1, (int) (is_scalar($page) ? $page : 1));
-
-    $tab = $src['tab'] ?? 'dashboard';
-    $validTabs = ['dashboard', 'leads', 'analytics', 'database', 'system'];
-    $tab = in_array($tab, $validTabs, true) ? $tab : 'dashboard';
-
-    return ['status' => $status, 'q' => $q, 'page' => $page, 'tab' => $tab];
-}
-
-function admin_url(array $f): string
-{
-    $query = [];
-    if (($f['tab'] ?? 'dashboard') !== 'dashboard') { $query['tab'] = $f['tab']; }
-    if (($f['status'] ?? '') !== '')                 { $query['status'] = $f['status']; }
-    if (($f['q'] ?? '') !== '')                     { $query['q'] = $f['q']; }
-    if (($f['page'] ?? 1) > 1)                      { $query['page'] = $f['page']; }
-    return 'admin.php' . ($query ? '?' . http_build_query($query) : '');
-}
+const IDLE_TIMEOUT = 3600;
 
 function is_logged_in(): bool
 {
-    if (($_SESSION['admin'] ?? false) !== true) {
-        return false;
-    }
-    if (time() - (int) ($_SESSION['last_seen'] ?? 0) > IDLE_TIMEOUT) {
-        return false;
-    }
-    $_SESSION['last_seen'] = time();
+    if (($_SESSION['admin_logged'] ?? false) !== true) return false;
+    if (time() - (int) ($_SESSION['last_activity'] ?? 0) > IDLE_TIMEOUT) return false;
+    $_SESSION['last_activity'] = time();
     return true;
 }
 
-$loginError = null;
-$action = $_SERVER['REQUEST_METHOD'] === 'POST' ? ($_POST['action'] ?? '') : '';
+$pdo = db();
+$errors = [];
 
+// Initialize Admin Credentials from DB or Config
+if ($pdo) {
+    try {
+        $check = $pdo->query('SELECT COUNT(*) FROM admin_users')->fetchColumn();
+        if ((int)$check === 0) {
+            $stmt = $pdo->prepare('INSERT INTO admin_users (username, password_hash) VALUES (:u, :p)');
+            $stmt->execute([':u' => DEFAULT_ADMIN_USER, ':p' => DEFAULT_ADMIN_HASH]);
+        }
+    } catch (Throwable $t) {}
+}
+
+// ---------------------------------------------------------------------------
+// POST ACTIONS
+// ---------------------------------------------------------------------------
+$action = $_POST['action'] ?? '';
+
+// LOGIN
 if ($action === 'login') {
-    $lockedUntil = (int) ($_SESSION['lock_until'] ?? 0);
+    $user = trim($_POST['username'] ?? '');
+    $pass = trim($_POST['password'] ?? '');
 
     if (!csrf_valid()) {
-        $loginError = 'Oturum süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin.';
-    } elseif ($lockedUntil > time()) {
-        $loginError = 'Çok fazla hatalı deneme. Lütfen ' . ceil(($lockedUntil - time()) / 60) . ' dakika sonra tekrar deneyin.';
-    } else {
-        $user = is_string($_POST['username'] ?? null) ? $_POST['username'] : '';
-        $pass = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
-
-        $userOk = hash_equals(ADMIN_USER, $user);
-        $passOk = password_verify($pass, ADMIN_PASSWORD_HASH);
-
-        if ($userOk && $passOk) {
-            session_regenerate_id(true);
-            unset($_SESSION['csrf'], $_SESSION['login_fails'], $_SESSION['lock_until']);
-            $_SESSION['admin'] = true;
-            $_SESSION['last_seen'] = time();
+        $errors[] = 'Oturum doğrulaması başarısız.';
+    } elseif (!$pdo) {
+        // Fallback check against default config if DB down
+        if ($user === DEFAULT_ADMIN_USER && password_verify($pass, DEFAULT_ADMIN_HASH)) {
+            $_SESSION['admin_logged'] = true;
+            $_SESSION['admin_user'] = $user;
+            $_SESSION['last_activity'] = time();
             redirect('admin.php');
+        } else {
+            $errors[] = 'Giriş bilgileri hatalı.';
         }
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM admin_users WHERE username = :u LIMIT 1');
+        $stmt->execute([':u' => $user]);
+        $row = $stmt->fetch();
 
-        usleep(300000);
-        $fails = (int) ($_SESSION['login_fails'] ?? 0) + 1;
-        $_SESSION['login_fails'] = $fails;
-        if ($fails >= MAX_FAILS) {
-            $_SESSION['lock_until'] = time() + LOCK_SECONDS;
-            $_SESSION['login_fails'] = 0;
+        if ($row && password_verify($pass, $row['password_hash'])) {
+            session_regenerate_id(true);
+            $_SESSION['admin_logged'] = true;
+            $_SESSION['admin_user'] = $row['username'];
+            $_SESSION['last_activity'] = time();
+            log_system_action('ADMIN_LOGIN_SUCCESS', "User: {$row['username']}");
+            redirect('admin.php');
+        } else {
+            log_system_action('ADMIN_LOGIN_FAILED', "Attempted user: $user");
+            $errors[] = 'Kullanıcı adı veya şifre hatalı.';
         }
-        $loginError = 'Geçersiz kullanıcı adı veya şifre.';
     }
 }
 
+// LOGOUT
 if ($action === 'logout') {
     if (csrf_valid()) {
+        log_system_action('ADMIN_LOGOUT', "User: " . ($_SESSION['admin_user'] ?? ''));
         $_SESSION = [];
-        if (ini_get('session.use_cookies')) {
-            $c = session_get_cookie_params();
-            setcookie(session_name(), '', [
-                'expires'  => time() - 3600,
-                'path'     => $c['path'],
-                'secure'   => $c['secure'],
-                'httponly' => $c['httponly'],
-                'samesite' => $c['samesite'],
-            ]);
-        }
         session_destroy();
     }
     redirect('admin.php');
 }
 
-$pdo = db();
-
-if ($action === 'status') {
-    if (!is_logged_in()) { redirect('admin.php'); }
-    $filters = read_filters($_POST, 'f_');
-    $back = admin_url($filters);
-
-    $id     = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
-    $status = is_string($_POST['status'] ?? null) ? $_POST['status'] : '';
-
+// UPDATE ADMIN PASSWORD & USERNAME
+if ($action === 'update_password' && is_logged_in()) {
     if (!csrf_valid()) {
-        flash('err', 'Güvenlik doğrulaması başarısız.');
-    } elseif (!$pdo) {
-        flash('err', 'Veritabanı bağlantısı yok.');
-    } elseif ($id === false || $id < 1 || !array_key_exists($status, STATUSES)) {
-        flash('err', 'Geçersiz talep.');
+        flash('err', 'Oturum geçersiz.');
     } else {
-        $stmt = $pdo->prepare('UPDATE leads SET status = :status WHERE id = :id');
-        $stmt->execute([':status' => $status, ':id' => $id]);
-        flash('ok', "#{$id} numaralı kayıt durumu güncellendi: " . STATUSES[$status]);
+        $new_user = trim($_POST['new_username'] ?? '');
+        $new_pass = trim($_POST['new_password'] ?? '');
+
+        if (mb_strlen($new_user) < 3) {
+            flash('err', 'Kullanıcı adı en az 3 karakter olmalıdır.');
+        } elseif (mb_strlen($new_pass) < 6) {
+            flash('err', 'Yeni şifre en az 6 karakter olmalıdır.');
+        } elseif (!$pdo) {
+            flash('err', 'Veritabanı bağlantısı yok.');
+        } else {
+            $hash = password_hash($new_pass, PASSWORD_DEFAULT);
+            $currentUser = $_SESSION['admin_user'] ?? DEFAULT_ADMIN_USER;
+
+            $stmt = $pdo->prepare('UPDATE admin_users SET username = :u, password_hash = :p WHERE username = :curr');
+            $stmt->execute([':u' => $new_user, ':p' => $hash, ':curr' => $currentUser]);
+
+            $_SESSION['admin_user'] = $new_user;
+            log_system_action('ADMIN_CREDENTIALS_UPDATED', "New Username: $new_user");
+            flash('ok', 'Yönetici bilgileri ve şifreniz başarıyla güncellendi!');
+        }
     }
-    redirect($back);
+    redirect('admin.php?tab=security');
 }
 
-// Export CSV
-if (isset($_GET['export']) && $_GET['export'] === 'csv') {
-    if (!is_logged_in() || !$pdo) { redirect('admin.php'); }
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename=dovye_leads_' . date('Y-m-d_H-i') . '.csv');
-    $output = fopen('php://output', 'w');
-    fputcsv($output, ['ID', 'Ad Soyad', 'E-Posta', 'Hizmet', 'Mesaj', 'Durum', 'IP', 'Tarih']);
-    $stmt = $pdo->query('SELECT id, name, email, service, message, status, ip_address, created_at FROM leads ORDER BY id DESC');
-    while ($row = $stmt->fetch()) {
-        $row['service'] = SERVICES[$row['service']] ?? $row['service'];
-        $row['status']  = STATUSES[$row['status']] ?? $row['status'];
-        fputcsv($output, $row);
+// ADD YOUTUBE VIDEO
+if ($action === 'add_video' && is_logged_in()) {
+    if (csrf_valid() && $pdo) {
+        $title    = trim($_POST['title'] ?? '');
+        $url      = trim($_POST['youtube_url'] ?? '');
+        $category = trim($_POST['category'] ?? 'General');
+        $videoId  = parse_youtube_id($url);
+
+        if (!$videoId) {
+            flash('err', 'Geçersiz YouTube URL adresi!');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO youtube_videos (title, youtube_url, video_id, category) VALUES (:t, :u, :v, :c)');
+            $stmt->execute([':t' => $title, ':u' => $url, ':v' => $videoId, ':c' => $category]);
+            log_system_action('YOUTUBE_VIDEO_ADDED', "Title: $title, VideoID: $videoId");
+            flash('ok', 'YouTube videosu eklendi ve ana sayfada yayınlandı!');
+        }
     }
-    fclose($output);
-    exit;
+    redirect('admin.php?tab=youtube');
+}
+
+// DELETE YOUTUBE VIDEO
+if ($action === 'delete_video' && is_logged_in()) {
+    if (csrf_valid() && $pdo) {
+        $id = (int)($_POST['id'] ?? 0);
+        $stmt = $pdo->prepare('DELETE FROM youtube_videos WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        log_system_action('YOUTUBE_VIDEO_DELETED', "Video ID: $id");
+        flash('ok', 'Video silindi.');
+    }
+    redirect('admin.php?tab=youtube');
+}
+
+// ADD LIVE CAM
+if ($action === 'add_cam' && is_logged_in()) {
+    if (csrf_valid() && $pdo) {
+        $title    = trim($_POST['title'] ?? '');
+        $location = trim($_POST['location'] ?? '');
+        $embed    = trim($_POST['embed_url'] ?? '');
+
+        if (empty($title) || empty($embed)) {
+            flash('err', 'Başlık ve Embed URL zorunludur.');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO live_cams (title, location, embed_url) VALUES (:t, :l, :e)');
+            $stmt->execute([':t' => $title, ':l' => $location, ':e' => $embed]);
+            log_system_action('LIVE_CAM_ADDED', "Cam Title: $title");
+            flash('ok', 'Canlı kamera akışı eklendi!');
+        }
+    }
+    redirect('admin.php?tab=cameras');
+}
+
+// DELETE LIVE CAM
+if ($action === 'delete_cam' && is_logged_in()) {
+    if (csrf_valid() && $pdo) {
+        $id = (int)($_POST['id'] ?? 0);
+        $stmt = $pdo->prepare('DELETE FROM live_cams WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        log_system_action('LIVE_CAM_DELETED', "Cam ID: $id");
+        flash('ok', 'Kamera silindi.');
+    }
+    redirect('admin.php?tab=cameras');
+}
+
+// CLEAR LOGS
+if ($action === 'clear_logs' && is_logged_in()) {
+    if (csrf_valid() && $pdo) {
+        $pdo->exec('TRUNCATE TABLE system_logs');
+        log_system_action('LOGS_CLEARED', 'All system logs cleared by admin.');
+        flash('ok', 'Tüm sistem logları temizlendi.');
+    }
+    redirect('admin.php?tab=logs');
 }
 
 // ---------------------------------------------------------------------------
-// Login Screen View
+// VIEW CONTROLLER
 // ---------------------------------------------------------------------------
 if (!is_logged_in()) {
     ?>
@@ -153,543 +190,299 @@ if (!is_logged_in()) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex, nofollow">
-    <title>Yönetim Paneli Girişi — DOVYE Core</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>Giriş — DOVYE Management Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="login-body">
-<div class="ambient-glow"><div class="orb orb-1"></div></div>
+<body style="display:grid; place-items:center; min-height:100vh;">
+<div class="cyber-grid-bg"></div>
 
-<main class="login-wrapper">
-    <div class="glass-card login-card">
-        <div class="login-brand">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-            <span>DOVYE CORE OS</span>
-        </div>
-
-        <h2>Yönetici Girişi</h2>
-        <p class="login-desc">Sistem kontrol merkezine erişmek için doğrulama yapınız.</p>
-
-        <?php if ($loginError): ?>
-            <div class="alert alert--err" role="alert">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <div><?= e($loginError) ?></div>
-            </div>
-        <?php endif; ?>
-
-        <form method="post" action="admin.php">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="login">
-            <div class="field">
-                <label for="username">Kullanıcı Adı</label>
-                <input type="text" id="username" name="username" required autofocus placeholder="admin">
-            </div>
-            <div class="field">
-                <label for="password">Şifre</label>
-                <input type="password" id="password" name="password" required placeholder="••••••••">
-            </div>
-            <button type="submit" class="btn btn--primary btn--full">
-                <span>Giriş Yap</span>
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            </button>
-        </form>
+<div class="baklava-card" style="width:100%; max-width:400px;">
+    <div style="display:flex; align-items:center; gap:0.5rem; font-weight:800; color:var(--neon-cyan); margin-bottom:1.5rem;">
+        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
+        <span>DOVYE CORE OS</span>
     </div>
-</main>
+
+    <h2>Yönetici Girişi</h2>
+    <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:1.5rem;">Sistem kontrol merkezine erişim.</p>
+
+    <?php if ($errors): ?>
+        <div class="cyber-alert alert-err"><?= e($errors[0]) ?></div>
+    <?php endif; ?>
+
+    <form method="post" action="admin.php">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="login">
+        <div class="cyber-field">
+            <label>Kullanıcı Adı</label>
+            <input type="text" name="username" required placeholder="admin">
+        </div>
+        <div class="cyber-field">
+            <label>Şifre</label>
+            <input type="password" name="password" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="cyber-btn btn-cyan btn-full">Giriş Yap →</button>
+    </form>
+</div>
 </body>
 </html>
     <?php
     exit;
 }
 
-// ---------------------------------------------------------------------------
-// Dashboard Views & Data Gathering
-// ---------------------------------------------------------------------------
+// Logged In Dashboard Data
+$activeTab = $_GET['tab'] ?? 'dashboard';
 
-$filters = read_filters($_GET);
-$activeTab = $filters['tab'];
-
-// Default Stats
-$byStatus = array_fill_keys(array_keys(STATUSES), 0);
-$total = 0;
-$byService = [];
-$maxService = 1;
-$perDay = [];
-for ($i = 6; $i >= 0; $i--) {
-    $perDay[(new DateTimeImmutable("-{$i} days"))->format('Y-m-d')] = 0;
-}
-$last7 = 0;
-$maxDay = 1;
-$leads = [];
-$matched = 0;
-$pages = 1;
-$offset = 0;
-
-if ($pdo) {
-    try {
-        foreach ($pdo->query('SELECT status, COUNT(*) AS c FROM leads GROUP BY status') as $row) {
-            $byStatus[$row['status']] = (int) $row['c'];
-        }
-        $total = array_sum($byStatus);
-
-        foreach ($pdo->query('SELECT service, COUNT(*) AS c FROM leads GROUP BY service ORDER BY c DESC') as $row) {
-            $byService[$row['service']] = (int) $row['c'];
-        }
-        $maxService = $byService ? max($byService) : 1;
-
-        $stmt7 = $pdo->query('SELECT DATE(created_at) AS d, COUNT(*) AS c FROM leads WHERE created_at >= (CURDATE() - INTERVAL 6 DAY) GROUP BY DATE(created_at)');
-        foreach ($stmt7 as $row) {
-            if (isset($perDay[$row['d']])) {
-                $perDay[$row['d']] = (int) $row['c'];
-            }
-        }
-        $last7 = array_sum($perDay);
-        $maxDay = max(1, max($perDay));
-
-        // Leads Query
-        $where = [];
-        $params = [];
-        if ($filters['status'] !== '') {
-            $where[] = 'status = :status';
-            $params[':status'] = $filters['status'];
-        }
-        if ($filters['q'] !== '') {
-            $like = '%' . addcslashes($filters['q'], '%_\\') . '%';
-            $where[] = '(name LIKE :q1 OR email LIKE :q2 OR message LIKE :q3)';
-            $params[':q1'] = $params[':q2'] = $params[':q3'] = $like;
-        }
-        $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-
-        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM leads' . $whereSql);
-        $countStmt->execute($params);
-        $matched = (int) $countStmt->fetchColumn();
-
-        $pages = max(1, (int) ceil($matched / PER_PAGE));
-        $filters['page'] = min($filters['page'], $pages);
-        $offset = ($filters['page'] - 1) * PER_PAGE;
-
-        $listStmt = $pdo->prepare(
-            'SELECT id, name, email, service, message, status, ip_address, created_at
-             FROM leads' . $whereSql . ' ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset'
-        );
-        foreach ($params as $k => $v) {
-            $listStmt->bindValue($k, $v, PDO::PARAM_STR);
-        }
-        $listStmt->bindValue(':limit', PER_PAGE, PDO::PARAM_INT);
-        $listStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $listStmt->execute();
-        $leads = $listStmt->fetchAll();
-    } catch (PDOException $e) {
-        error_log("Dashboard query error: " . $e->getMessage());
-    }
-}
+$yt_videos = $pdo ? $pdo->query('SELECT * FROM youtube_videos ORDER BY id DESC')->fetchAll() : [];
+$cams      = $pdo ? $pdo->query('SELECT * FROM live_cams ORDER BY id DESC')->fetchAll() : [];
+$logs      = $pdo ? $pdo->query('SELECT * FROM system_logs ORDER BY id DESC LIMIT 50')->fetchAll() : [];
+$leads     = $pdo ? $pdo->query('SELECT * FROM leads ORDER BY id DESC LIMIT 50')->fetchAll() : [];
 
 $flash = flash();
-$tabLink = static fn (string $t): string => admin_url(['tab' => $t, 'status' => '', 'q' => '', 'page' => 1]);
 ?>
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex, nofollow">
     <title>Yönetim Konsolu — DOVYE Studio</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="dashboard-body">
+<body>
 
-<!-- Sidebar Navigation -->
-<aside class="sidebar">
-    <div class="sidebar-brand">
-        <svg class="svg-icon brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-        <div class="brand-names">
-            <strong>DOVYE<span>CORE</span></strong>
-            <small>Enterprise OS v2.5</small>
-        </div>
-    </div>
-
-    <nav class="sidebar-nav">
-        <a href="<?= e($tabLink('dashboard')) ?>" class="nav-item <?= $activeTab === 'dashboard' ? 'active' : '' ?>">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            <span>Genel Bakış</span>
-        </a>
-        <a href="<?= e($tabLink('leads')) ?>" class="nav-item <?= $activeTab === 'leads' ? 'active' : '' ?>">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span>Müşteri Talepleri</span>
-            <?php if ($byStatus['new'] > 0): ?>
-                <span class="badge-count"><?= $byStatus['new'] ?></span>
-            <?php endif; ?>
-        </a>
-        <a href="<?= e($tabLink('analytics')) ?>" class="nav-item <?= $activeTab === 'analytics' ? 'active' : '' ?>">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            <span>Analitik & Raporlar</span>
-        </a>
-        <a href="<?= e($tabLink('database')) ?>" class="nav-item <?= $activeTab === 'database' ? 'active' : '' ?>">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-            <span>Veritabanı Durumu</span>
-        </a>
-        <a href="<?= e($tabLink('system')) ?>" class="nav-item <?= $activeTab === 'system' ? 'active' : '' ?>">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span>Sistem Tanı/Sağlık</span>
-        </a>
-    </nav>
-
-    <div class="sidebar-footer">
-        <div class="user-info-card">
-            <div class="user-avatar">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </div>
+<div class="admin-layout">
+    <aside class="admin-sidebar">
+        <div class="admin-brand">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 17 22 12"/></svg>
             <div>
-                <strong class="user-name"><?= e(ADMIN_USER) ?></strong>
-                <span class="user-role">Super Admin</span>
+                <strong style="display:block;">DOVYE<span>CORE</span></strong>
+                <small style="color:var(--text-muted); font-family:var(--font-mono);">CMS v3.0 OS</small>
             </div>
         </div>
-        <form method="post" action="admin.php">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="logout">
-            <button type="submit" class="btn btn--ghost btn--full btn--sm logout-btn">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                <span>Güvenli Çıkış</span>
-            </button>
-        </form>
-    </div>
-</aside>
 
-<!-- Main Area -->
-<div class="main-wrapper">
-    <header class="dashboard-header">
-        <div class="header-title">
-            <h1>
-                <?php
-                switch ($activeTab) {
-                    case 'leads': echo 'Müşteri Talepleri Yönetimi'; break;
-                    case 'analytics': echo 'Performans & Analitik Raporları'; break;
-                    case 'database': echo 'Veritabanı Yapılandırma Kontrolü'; break;
-                    case 'system': echo 'Sistem Teşhis & Sunucu Sağlığı'; break;
-                    default: echo 'Sistem Genel Bakış Merkezi'; break;
-                }
-                ?>
-            </h1>
-            <p>DOVYE Studio Altyapı Yönetim Platformu</p>
+        <nav class="admin-nav">
+            <a href="admin.php?tab=dashboard" class="admin-nav-item <?= $activeTab === 'dashboard' ? 'active' : '' ?>">Genel Bakış</a>
+            <a href="admin.php?tab=youtube" class="admin-nav-item <?= $activeTab === 'youtube' ? 'active' : '' ?>">YouTube Video Hub</a>
+            <a href="admin.php?tab=cameras" class="admin-nav-item <?= $activeTab === 'cameras' ? 'active' : '' ?>">Dünya Canlı Kameralar</a>
+            <a href="admin.php?tab=leads" class="admin-nav-item <?= $activeTab === 'leads' ? 'active' : '' ?>">Müşteri Talepleri</a>
+            <a href="admin.php?tab=logs" class="admin-nav-item <?= $activeTab === 'logs' ? 'active' : '' ?>">Sistem Logları</a>
+            <a href="admin.php?tab=security" class="admin-nav-item <?= $activeTab === 'security' ? 'active' : '' ?>">Şifre & Güvenlik</a>
+        </nav>
+
+        <div style="padding: 1.25rem; border-top: 1px solid var(--border-dark);">
+            <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">Aktif Kullanıcı: <strong><?= e($_SESSION['admin_user']) ?></strong></div>
+            <form method="post" action="admin.php">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="logout">
+                <button type="submit" class="cyber-btn btn-ghost btn-sm btn-full">Güvenli Çıkış</button>
+            </form>
         </div>
+    </aside>
 
-        <div class="header-actions">
-            <?php if ($pdo): ?>
-                <a href="admin.php?export=csv" class="btn btn--secondary btn--sm">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    <span>CSV Dışa Aktar</span>
-                </a>
-            <?php endif; ?>
-            <a href="index.php" target="_blank" class="btn btn--ghost btn--sm">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                <span>Siteyi Görüntüle</span>
-            </a>
-        </div>
-    </header>
-
-    <main class="content-area">
+    <main class="admin-main">
         <?php if ($flash): ?>
-            <div class="alert alert--<?= $flash['type'] === 'ok' ? 'ok' : 'err' ?>" role="status">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <div><?= e($flash['message']) ?></div>
-            </div>
-        <?php endif; ?>
-
-        <?php if (!$pdo): ?>
-            <!-- Global DB Alert -->
-            <div class="alert alert--err" role="alert">
-                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <div>
-                    <strong>Veritabanı Sunucusuna Erişilemiyor (500 Hatası Önleme Modu)</strong><br>
-                    `config.php` üzerinden PDO bağlantısı kurulamadı. Aşağıdaki <strong>Veritabanı Durumu</strong> sekmesinden ortam değişkenlerini kontrol edebilirsiniz.
-                </div>
-            </div>
+            <div class="cyber-alert alert-<?= $flash['type'] === 'ok' ? 'ok' : 'err' ?>"><?= e($flash['message']) ?></div>
         <?php endif; ?>
 
         <?php if ($activeTab === 'dashboard'): ?>
-            <!-- DASHBOARD TAB -->
-            <section class="metrics-grid">
-                <div class="glass-card metric-card">
-                    <span class="metric-title">Toplam Kayıtlı Aday</span>
-                    <div class="metric-value-row">
-                        <span class="metric-num"><?= $total ?></span>
-                        <svg class="svg-icon m-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                    </div>
-                    <span class="metric-sub">Tüm zamanlar toplamı</span>
-                </div>
+            <h2>Genel Bakış Merkezi</h2>
+            <p style="color:var(--text-muted); margin-bottom:2rem;">Canlı sistem durumu ve yayınlanmış içerikler.</p>
 
-                <div class="glass-card metric-card status-new">
-                    <span class="metric-title">Bekleyen (Yeni)</span>
-                    <div class="metric-value-row">
-                        <span class="metric-num"><?= $byStatus['new'] ?></span>
-                        <svg class="svg-icon m-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    </div>
-                    <span class="metric-sub">Geri dönüş bekleyenler</span>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1.25rem; margin-bottom:2rem;">
+                <div class="baklava-card">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">Yayınlanan Videolar</span>
+                    <div style="font-size:2rem; font-weight:800; color:var(--neon-cyan);"><?= count($yt_videos) ?></div>
                 </div>
-
-                <div class="glass-card metric-card status-read">
-                    <span class="metric-title">İncelenen</span>
-                    <div class="metric-value-row">
-                        <span class="metric-num"><?= $byStatus['read'] ?></span>
-                        <svg class="svg-icon m-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </div>
-                    <span class="metric-sub">İşleme alınanlar</span>
+                <div class="baklava-card">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">Canlı Kameralar</span>
+                    <div style="font-size:2rem; font-weight:800; color:var(--neon-pink);"><?= count($cams) ?></div>
                 </div>
-
-                <div class="glass-card metric-card status-contacted">
-                    <span class="metric-title">İletişime Geçildi</span>
-                    <div class="metric-value-row">
-                        <span class="metric-num"><?= $byStatus['contacted'] ?></span>
-                        <svg class="svg-icon m-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    </div>
-                    <span class="metric-sub">Teklif iletilenler</span>
+                <div class="baklava-card">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">Müşteri Talepleri</span>
+                    <div style="font-size:2rem; font-weight:800; color:var(--neon-emerald);"><?= count($leads) ?></div>
                 </div>
-            </section>
+            </div>
 
-            <section class="two-col-grid">
-                <div class="glass-card">
-                    <div class="card-header">
-                        <h3>Haftalık Talep Trendi</h3>
-                        <span class="badge-tag">Son 7 Gün</span>
+        <?php elseif ($activeTab === 'youtube'): ?>
+            <h2>YouTube Video Yönetimi</h2>
+            <p style="color:var(--text-muted); margin-bottom:1.5rem;">Sitenin YouTube oynatma motoruna yeni videolar ekleyin.</p>
+
+            <div class="baklava-card" style="margin-bottom:2rem;">
+                <h3>Yeni YouTube Videosu Ekle</h3>
+                <form method="post" action="admin.php?tab=youtube" style="margin-top:1rem;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_video">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                        <div class="cyber-field">
+                            <label>Video Başlığı</label>
+                            <input type="text" name="title" required placeholder="Cyberpunk 2077 Night City 4K">
+                        </div>
+                        <div class="cyber-field">
+                            <label>YouTube Linki (URL)</label>
+                            <input type="url" name="youtube_url" required placeholder="https://www.youtube.com/watch?v=Leed38_x0_0">
+                        </div>
                     </div>
-                    <ul class="chart-bars">
-                        <?php foreach ($perDay as $day => $count): ?>
-                            <li>
-                                <span class="chart-label"><?= e(date('d M', strtotime($day))) ?></span>
-                                <div class="bar-track">
-                                    <progress max="<?= $maxDay ?>" value="<?= $count ?>"></progress>
-                                </div>
-                                <span class="chart-val"><?= $count ?></span>
-                            </li>
+                    <div class="cyber-field">
+                        <label>Kategori</label>
+                        <input type="text" name="category" placeholder="Lo-Fi Beats / Cyberpunk / Tech">
+                    </div>
+                    <button type="submit" class="cyber-btn btn-cyan">Videoyu Ekle ve Yayınla →</button>
+                </form>
+            </div>
+
+            <div class="baklava-card">
+                <h3>Yayınlanan Videolar (<?= count($yt_videos) ?>)</h3>
+                <table class="admin-table" style="margin-top:1rem;">
+                    <thead><tr><th>ID</th><th>Başlık</th><th>Kategori</th><th>Video ID</th><th>İşlem</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($yt_videos as $v): ?>
+                            <tr>
+                                <td>#<?= $v['id'] ?></td>
+                                <td><strong><?= e($v['title']) ?></strong></td>
+                                <td><?= e($v['category']) ?></td>
+                                <td><code><?= e($v['video_id']) ?></code></td>
+                                <td>
+                                    <form method="post" action="admin.php?tab=youtube" onsubmit="return confirm('Silinsin mi?');">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="delete_video">
+                                        <input type="hidden" name="id" value="<?= $v['id'] ?>">
+                                        <button type="submit" class="cyber-btn btn-pink btn-sm">Sil</button>
+                                    </form>
+                                </td>
+                            </tr>
                         <?php endforeach; ?>
-                    </ul>
-                </div>
+                    </tbody>
+                </table>
+            </div>
 
-                <div class="glass-card">
-                    <div class="card-header">
-                        <h3>Hizmet Kategorisi Dağılımı</h3>
-                        <span class="badge-tag">İlgi Alanları</span>
+        <?php elseif ($activeTab === 'cameras'): ?>
+            <h2>Dünya Canlı Kameralar Yönetimi</h2>
+            <p style="color:var(--text-muted); margin-bottom:1.5rem;">Ana sayfadaki canlı yayın kameralarını ekleyin/düzenleyin.</p>
+
+            <div class="baklava-card" style="margin-bottom:2rem;">
+                <h3>Yeni Canlı Kamera Ekle</h3>
+                <form method="post" action="admin.php?tab=cameras" style="margin-top:1rem;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_cam">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                        <div class="cyber-field">
+                            <label>Kamera Başlığı</label>
+                            <input type="text" name="title" required placeholder="Shibuya Crossing Live">
+                        </div>
+                        <div class="cyber-field">
+                            <label>Lokasyon</label>
+                            <input type="text" name="location" placeholder="Tokyo, Japan">
+                        </div>
                     </div>
-                    <?php if (!$byService): ?>
-                        <div class="empty-box">Veri yok</div>
-                    <?php else: ?>
-                        <ul class="chart-bars">
-                            <?php foreach ($byService as $key => $count): ?>
-                                <li>
-                                    <span class="chart-label"><?= e(SERVICES[$key] ?? $key) ?></span>
-                                    <div class="bar-track">
-                                        <progress max="<?= $maxService ?>" value="<?= $count ?>"></progress>
-                                    </div>
-                                    <span class="chart-val"><?= $count ?></span>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php endif; ?>
+                    <div class="cyber-field">
+                        <label>Embed / Akış URL (YouTube Embed Linki)</label>
+                        <input type="url" name="embed_url" required placeholder="https://www.youtube.com/embed/h3fUgOKFMNU">
+                    </div>
+                    <button type="submit" class="cyber-btn btn-cyan">Kameryı Ekle →</button>
+                </form>
+            </div>
+
+            <div class="baklava-card">
+                <h3>Aktif Kameralar (<?= count($cams) ?>)</h3>
+                <table class="admin-table" style="margin-top:1rem;">
+                    <thead><tr><th>ID</th><th>Başlık</th><th>Lokasyon</th><th>Embed URL</th><th>İşlem</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($cams as $c): ?>
+                            <tr>
+                                <td>#<?= $c['id'] ?></td>
+                                <td><strong><?= e($c['title']) ?></strong></td>
+                                <td><?= e($c['location']) ?></td>
+                                <td><small><?= e($c['embed_url']) ?></small></td>
+                                <td>
+                                    <form method="post" action="admin.php?tab=cameras" onsubmit="return confirm('Silinsin mi?');">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="delete_cam">
+                                        <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                                        <button type="submit" class="cyber-btn btn-pink btn-sm">Sil</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+        <?php elseif ($activeTab === 'security'): ?>
+            <h2>Şifre ve Yönetici Güvenliği</h2>
+            <p style="color:var(--text-muted); margin-bottom:1.5rem;">Yönetici kullanıcı adınızı ve şifrenizi buradan güncelleyin.</p>
+
+            <div class="baklava-card" style="max-width:500px;">
+                <h3>Giriş Bilgilerini Güncelle</h3>
+                <form method="post" action="admin.php?tab=security" style="margin-top:1rem;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="update_password">
+                    <div class="cyber-field">
+                        <label>Yeni Kullanıcı Adı</label>
+                        <input type="text" name="new_username" required value="<?= e($_SESSION['admin_user']) ?>">
+                    </div>
+                    <div class="cyber-field">
+                        <label>Yeni Şifre</label>
+                        <input type="password" name="new_password" required placeholder="En az 6 karakter">
+                    </div>
+                    <button type="submit" class="cyber-btn btn-cyan btn-full">Bilgileri Güncelle →</button>
+                </form>
+            </div>
+
+        <?php elseif ($activeTab === 'logs'): ?>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <div>
+                    <h2>Sistem Audit Logları</h2>
+                    <p style="color:var(--text-muted);">Tüm erişim, giriş ve içerik ekleme kayıtları.</p>
                 </div>
-            </section>
+                <form method="post" action="admin.php?tab=logs">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="clear_logs">
+                    <button type="submit" class="cyber-btn btn-pink btn-sm">Logları Temizle</button>
+                </form>
+            </div>
+
+            <div class="baklava-card">
+                <table class="admin-table">
+                    <thead><tr><th>ID</th><th>Aksiyon</th><th>Detay</th><th>IP Adresi</th><th>Tarih</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($logs as $l): ?>
+                            <tr>
+                                <td>#<?= $l['id'] ?></td>
+                                <td><span style="color:var(--neon-cyan); font-family:var(--font-mono);"><?= e($l['action']) ?></span></td>
+                                <td><?= e($l['details']) ?></td>
+                                <td><code><?= e($l['ip_address']) ?></code></td>
+                                <td><small><?= e($l['created_at']) ?></small></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
 
         <?php elseif ($activeTab === 'leads'): ?>
-            <!-- LEADS TAB -->
-            <section class="glass-card">
-                <div class="table-toolbar">
-                    <div class="status-filters">
-                        <a href="<?= e(admin_url(['tab' => 'leads', 'status' => ''])) ?>" class="filter-pill <?= $filters['status'] === '' ? 'active' : '' ?>">Tümü (<?= $total ?>)</a>
-                        <?php foreach (STATUSES as $key => $label): ?>
-                            <a href="<?= e(admin_url(['tab' => 'leads', 'status' => $key])) ?>" class="filter-pill <?= $filters['status'] === $key ? 'active' : '' ?>"><?= e($label) ?> (<?= $byStatus[$key] ?>)</a>
-                        <?php endforeach; ?>
-                    </div>
+            <h2>Müşteri Talepleri (<?= count($leads) ?>)</h2>
+            <p style="color:var(--text-muted); margin-bottom:1.5rem;">İletişim formundan gelen iletiler.</p>
 
-                    <form method="get" action="admin.php" class="search-box">
-                        <input type="hidden" name="tab" value="leads">
-                        <?php if ($filters['status'] !== ''): ?>
-                            <input type="hidden" name="status" value="<?= e($filters['status']) ?>">
-                        <?php endif; ?>
-                        <input type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Arama yapınız...">
-                        <button type="submit" class="btn btn--secondary btn--sm">Ara</button>
-                    </form>
-                </div>
-
-                <div class="data-table-wrapper">
-                    <table class="data-table">
-                        <thead>
+            <div class="baklava-card">
+                <table class="admin-table">
+                    <thead><tr><th>ID</th><th>İsim</th><th>E-Posta</th><th>Hizmet</th><th>Mesaj</th><th>IP</th><th>Tarih</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($leads as $ld): ?>
                             <tr>
-                                <th>ID</th>
-                                <th>Kişi Bilgisi</th>
-                                <th>Hizmet</th>
-                                <th>Mesaj Detayı</th>
-                                <th>Tarih</th>
-                                <th>Durum</th>
-                                <th style="text-align: right;">Aksiyon</th>
+                                <td>#<?= $ld['id'] ?></td>
+                                <td><strong><?= e($ld['name']) ?></strong></td>
+                                <td><?= e($ld['email']) ?></td>
+                                <td><?= e(SERVICES[$ld['service']] ?? $ld['service']) ?></td>
+                                <td><?= e($ld['message']) ?></td>
+                                <td><code><?= e($ld['ip_address']) ?></code></td>
+                                <td><small><?= e($ld['created_at']) ?></small></td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!$leads): ?>
-                                <tr>
-                                    <td colspan="7" class="no-data">Kayıt bulunamadı.</td>
-                                </tr>
-                            <?php endif; ?>
-                            <?php foreach ($leads as $lead): ?>
-                                <?php
-                                $msg = (string) $lead['message'];
-                                $short = mb_strlen($msg) > 70 ? mb_substr($msg, 0, 70) . '…' : $msg;
-                                ?>
-                                <tr>
-                                    <td class="font-mono">#<?= (int) $lead['id'] ?></td>
-                                    <td>
-                                        <strong><?= e($lead['name']) ?></strong><br>
-                                        <small class="text-muted"><?= e($lead['email']) ?></small>
-                                    </td>
-                                    <td><span class="service-tag"><?= e(SERVICES[$lead['service']] ?? $lead['service']) ?></span></td>
-                                    <td class="msg-col">
-                                        <details class="msg-details">
-                                            <summary><?= e($short) ?></summary>
-                                            <div class="msg-content">
-                                                <p><?= e($msg) ?></p>
-                                                <small class="text-muted font-mono">IP: <?= e($lead['ip_address'] ?? 'Bulunamadı') ?></small>
-                                            </div>
-                                        </details>
-                                    </td>
-                                    <td class="nowrap">
-                                        <?= e(date('d.m.Y', strtotime((string) $lead['created_at']))) ?><br>
-                                        <small class="text-muted"><?= e(date('H:i', strtotime((string) $lead['created_at']))) ?></small>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge status-<?= e($lead['status']) ?>">
-                                            <?= e(STATUSES[$lead['status']] ?? $lead['status']) ?>
-                                        </span>
-                                    </td>
-                                    <td style="text-align: right;">
-                                        <form method="post" action="admin.php" class="inline-actions">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="action" value="status">
-                                            <input type="hidden" name="id" value="<?= (int) $lead['id'] ?>">
-                                            <input type="hidden" name="f_tab" value="leads">
-                                            <input type="hidden" name="f_status" value="<?= e($filters['status']) ?>">
-                                            <input type="hidden" name="f_q" value="<?= e($filters['q']) ?>">
-
-                                            <?php if ($lead['status'] !== 'read'): ?>
-                                                <button type="submit" name="status" value="read" class="btn-icon" title="İncelendi Yap">
-                                                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                                </button>
-                                            <?php endif; ?>
-                                            <?php if ($lead['status'] !== 'contacted'): ?>
-                                                <button type="submit" name="status" value="contacted" class="btn-icon btn-icon-success" title="İletişime Geçildi">
-                                                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                                </button>
-                                            <?php endif; ?>
-                                            <?php if ($lead['status'] !== 'new'): ?>
-                                                <button type="submit" name="status" value="new" class="btn-icon" title="Yeniye Al">
-                                                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                                                </button>
-                                            <?php endif; ?>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="table-pagination">
-                    <span>Toplam <strong><?= $matched ?></strong> kayıttan <strong><?= $offset + 1 ?>-<?= min($offset + PER_PAGE, $matched) ?></strong> gösteriliyor</span>
-                    <div class="pagination-buttons">
-                        <a href="<?= e(admin_url([...$filters, 'page' => $filters['page'] - 1])) ?>" class="btn btn--ghost btn--sm <?= $filters['page'] <= 1 ? 'disabled' : '' ?>">← Önceki</a>
-                        <a href="<?= e(admin_url([...$filters, 'page' => $filters['page'] + 1])) ?>" class="btn btn--ghost btn--sm <?= $filters['page'] >= $pages ? 'disabled' : '' ?>">Sonraki →</a>
-                    </div>
-                </div>
-            </section>
-
-        <?php elseif ($activeTab === 'analytics'): ?>
-            <!-- ANALYTICS TAB -->
-            <section class="glass-card">
-                <h3>Analitik Detayları</h3>
-                <p>Veri akışı ve detaylı segmentasyon raporları.</p>
-                <div class="two-col-grid" style="margin-top: 1.5rem;">
-                    <div class="info-card">
-                        <h4>Dönüşüm Oranı</h4>
-                        <div class="big-stat"><?= $total > 0 ? round(($byStatus['contacted'] / $total) * 100, 1) : 0 ?>%</div>
-                        <p class="text-muted">Gelen taleplerden iletişime geçilenlerin oranı.</p>
-                    </div>
-                    <div class="info-card">
-                        <h4>Ortalama Yanıt Hızı</h4>
-                        <div class="big-stat">&lt; 12 Saat</div>
-                        <p class="text-muted">Ekip tarafından inceleme süresi.</p>
-                    </div>
-                </div>
-            </section>
-
-        <?php elseif ($activeTab === 'database'): ?>
-            <!-- DATABASE SETUP TAB -->
-            <section class="glass-card">
-                <h3>Veritabanı Durumu & Ortam Değişkenleri Teşhisi</h3>
-                <p>Coolify MariaDB konteyner bağlantısı kontrolü.</p>
-
-                <div class="diag-grid" style="margin-top: 1.5rem;">
-                    <div class="diag-item">
-                        <span>DB_HOST (Konteyner İç Adı):</span>
-                        <strong><?= e(DB_HOST) ?></strong>
-                    </div>
-                    <div class="diag-item">
-                        <span>DB_NAME (Veritabanı Adı):</span>
-                        <strong><?= e(DB_NAME) ?></strong>
-                    </div>
-                    <div class="diag-item">
-                        <span>DB_USER (Kullanıcı Adı):</span>
-                        <strong><?= e(DB_USER) ?></strong>
-                    </div>
-                    <div class="diag-item">
-                        <span>Bağlantı Durumu:</span>
-                        <strong style="color: <?= $pdo ? 'var(--emerald)' : 'var(--rose)' ?>;">
-                            <?= $pdo ? 'BAĞLANDI (HEALTHY)' : 'BAĞLANAMADI (DISCONNECTED)' ?>
-                        </strong>
-                    </div>
-                </div>
-
-                <div class="help-box" style="margin-top: 2rem;">
-                    <h4>Coolify Üzerinde Bağlantı Nasıl Kurulur?</h4>
-                    <ol>
-                        <li>Coolify panelinizde MariaDB servisinize gidin ve <strong>Internal Hostname</strong> değerini kopyalayın.</li>
-                        <li>PHP uygulamanızın <strong>Environment Variables</strong> sekmesine aşağıdaki değişkenleri ekleyip kaydedin:
-                            <pre><code>DB_HOST=&lt;MARIADB_INTERNAL_HOSTNAME&gt;
-DB_NAME=lead_panel
-DB_USER=root
-DB_PASS=&lt;MARIADB_ROOT_PASSWORD&gt;</code></pre>
-                        </li>
-                        <li>Uygulamayı <strong>Redeploy</strong> vererek yeniden başlatın.</li>
-                    </ol>
-                </div>
-            </section>
-
-        <?php elseif ($activeTab === 'system'): ?>
-            <!-- SYSTEM HEALTH TAB -->
-            <section class="glass-card">
-                <h3>Sistem Teşhis ve Sunucu Bilgileri</h3>
-                <div class="diag-grid" style="margin-top: 1.5rem;">
-                    <div class="diag-item">
-                        <span>PHP Sürümü:</span>
-                        <strong><?= e(PHP_VERSION) ?></strong>
-                    </div>
-                    <div class="diag-item">
-                        <span>Sunucu Zaman Dilimi:</span>
-                        <strong><?= e(date_default_timezone_get()) ?></strong>
-                    </div>
-                    <div class="diag-item">
-                        <span>Apache/Web Sunucu:</span>
-                        <strong><?= e($_SERVER['SERVER_SOFTWARE'] ?? 'Apache/Docker') ?></strong>
-                    </div>
-                    <div class="diag-item">
-                        <span>HTTPS / TLS Proxy:</span>
-                        <strong><?= (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ? 'Aktif (Traefik Proxy SSL)' : 'Doğrudan HTTP' ?></strong>
-                    </div>
-                </div>
-            </section>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         <?php endif; ?>
     </main>
 </div>
