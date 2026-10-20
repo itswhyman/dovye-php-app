@@ -1,3 +1,3 @@
-# DOVYE STUDIO — Ultimate Cyber Core OS v3.0
+# DOVYE STUDIO — Mega Cyber OS v4.0
 
-Radikal baklava/polygon Navbar tasarımlı, YouTube medya motorlu ve canlı dünya kameraları destekli tam teşekküllü web yazılımı.
+Baklava kesim floating navbar, YouTube Theatre (100vh), Skyline & Live Cams, Hava/Döviz/Hosting/Arcade modülleri ve Açık/Koyu tema değiştiricili mega altyapı.

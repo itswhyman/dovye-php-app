@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * DOVYE STUDIO — Cyber Core Engine & Global Config
+ * DOVYE STUDIO — Mega Cyber OS v4.0 Global Config
  */
 
 define('DB_HOST', getenv('DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'dovye-mysql'));
@@ -14,25 +14,11 @@ define('DB_PASS', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: (getenv('MYSQL_
 define('DEFAULT_ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
 define('DEFAULT_ADMIN_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh33BfhAMO2Y4.hk/qQFlv6doCLZASlWGP1zHZGtO3ioi');
 
-const SERVICES = [
-    'cyber_dev'  => 'Next-Gen Web Apps & Platforms',
-    'ui_design'  => 'Cyberpunk & Futuristic UI/UX',
-    'cloud_ops'  => 'DevOps & Docker Cluster Engine',
-    'ai_models'  => 'AI Integration & Neural Pipeline',
-    'security'   => 'Penetration Test & Audit'
-];
-
-const STATUSES = [
-    'new'       => 'Yeni Aday',
-    'read'      => 'İncelendi',
-    'contacted' => 'İletişime Geçildi'
-];
-
 date_default_timezone_set('Europe/Istanbul');
 
-// Headers & Session
+// Headers
 header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
+header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -46,11 +32,10 @@ if (session_status() === PHP_SESSION_NONE) {
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
-    session_name('dovye_cyber_session');
+    session_name('dovye_v4_session');
     session_start();
 }
 
-// Database Connection
 function db(): ?PDO
 {
     static $pdo = null;
@@ -77,24 +62,16 @@ function db(): ?PDO
     }
 }
 
-// System Logger Helper
 function log_system_action(string $action, string $details = ''): void
 {
     $pdo = db();
     if (!$pdo) return;
     try {
         $stmt = $pdo->prepare('INSERT INTO system_logs (action, details, ip_address) VALUES (:act, :det, :ip)');
-        $stmt->execute([
-            ':act' => $action,
-            ':det' => $details,
-            ':ip'  => client_ip()
-        ]);
-    } catch (Throwable $t) {
-        error_log('Log error: ' . $t->getMessage());
-    }
+        $stmt->execute([':act' => $action, ':det' => $details, ':ip' => client_ip()]);
+    } catch (Throwable $t) {}
 }
 
-// Extract YouTube ID
 function parse_youtube_id(string $url): ?string
 {
     if (preg_match('/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\x2F|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i', $url, $match)) {
