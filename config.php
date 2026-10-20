@@ -7,16 +7,13 @@ define('DB_NAME', getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: (getenv('MYSQL_
 define('DB_USER', getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: (getenv('MYSQL_USER') ?: 'root')));
 define('DB_PASS', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: (getenv('MYSQL_PASSWORD') ?: '')));
 
-define('DEFAULT_ADMIN_USER', getenv('ADMIN_USER') ?: 'admin');
-define('DEFAULT_ADMIN_HASH', getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$/C.2ixjjyh33BfhAMO2Y4.hk/qQFlv6doCLZASlWGP1zHZGtO3ioi');
-
 date_default_timezone_set('Europe/Istanbul');
 
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_name('kralagario_v10_session');
+    session_name('kralagario_v11_session');
     session_start();
 }
 
@@ -46,7 +43,8 @@ function db(): ?PDO
 
 function get_game_settings(): array {
     $defaults = [
-        'game_speed' => '1.8',
+        'game_speed' => '1.4',
+        'growth_rate' => '1.0',
         'max_split_cells' => '16',
         'map_size' => '8000',
         'remerge_time_sec' => '10',

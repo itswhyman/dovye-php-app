@@ -9,7 +9,7 @@ $settings = get_game_settings();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>KRAL AGARİO — Live Online Multiplayer Arena</title>
+    <title>KRAL AGARİO — Single-Server Live Multiplayer Arena</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
@@ -18,10 +18,15 @@ $settings = get_game_settings();
 
 <div class="cyber-bg-grid"></div>
 
-<!-- ADMIN CONFIG PASSED TO JS -->
+<!-- 10 MINUTE SESSION TIMEOUT BAR -->
+<div class="session-timer-bar">
+    ⏱️ Sunucu Oturum Yenileme: <span id="reloadCountdown">10:00</span>
+</div>
+
 <script>
 window.GAME_CONFIG = {
-    speed: <?= (float)($settings['game_speed'] ?? 1.8) ?>,
+    speed: <?= (float)($settings['game_speed'] ?? 1.4) ?>,
+    growthRate: <?= (float)($settings['growth_rate'] ?? 1.0) ?>,
     maxSplitCells: <?= (int)($settings['max_split_cells'] ?? 16) ?>,
     mapSize: <?= (int)($settings['map_size'] ?? 8000) ?>,
     remergeSec: <?= (int)($settings['remerge_time_sec'] ?? 10) ?>,
@@ -29,11 +34,11 @@ window.GAME_CONFIG = {
 };
 </script>
 
-<!-- START NICK & CUSTOMIZATION OVERLAY -->
+<!-- START NICK OVERLAY -->
 <div class="nick-overlay" id="nickOverlay">
     <div class="nick-card">
         <h1 style="font-size:2rem; color:var(--primary-cyan); margin-bottom:0.2rem;">KRAL AGARİO</h1>
-        <p style="color:var(--text-muted); font-size:0.85rem;">Arkadaşlarınızla Aynı Haritada Canlı Kapışmak İçin Karakterinizi Seçin:</p>
+        <p style="color:var(--text-muted); font-size:0.85rem;">Arkadaşlarınızla Aynı Sunucuda Oynamak İçin Nick Girin:</p>
 
         <input type="text" id="playerNickInput" class="nick-input" placeholder="Oyuncu Nick / Takma Ad" maxlength="15" autofocus value="DGRWEB_Kral">
 
@@ -96,6 +101,23 @@ window.GAME_CONFIG = {
 
 <script src="js/dgrwebio.js"></script>
 <script>
+// 10-MINUTE AUTO PAGE RELOAD TIMER (Sunucu Aşırı Yüklenmesini Önleme)
+let totalSecs = 600; // 10 minutes = 600 seconds
+const timerSpan = document.getElementById('reloadCountdown');
+
+const countdownInterval = setInterval(() => {
+    totalSecs--;
+    if (totalSecs <= 0) {
+        clearInterval(countdownInterval);
+        alert('Sunucu oturum süreniz (10 dakika) doldu. Sayfa güvenlik ve performans için otomatik yenileniyor.');
+        location.reload();
+    } else {
+        const mins = Math.floor(totalSecs / 60);
+        const secs = totalSecs % 60;
+        timerSpan.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+}, 1000);
+
 // Theme Switcher
 const themeBtn = document.getElementById('themeToggleBtn');
 themeBtn.addEventListener('click', () => {

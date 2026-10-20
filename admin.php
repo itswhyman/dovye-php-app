@@ -19,7 +19,7 @@ if (!($_SESSION['admin_logged'] ?? false)) {
     <head><title>Admin Giriş — KRAL AGARİO</title><link rel="stylesheet" href="assets/style.css"></head>
     <body style="display:grid; place-items:center; min-height:100vh;">
     <div class="nick-card">
-        <h2>KRAL AGARİO Admin OS v10.0</h2>
+        <h2>KRAL AGARİO Admin OS v11.0</h2>
         <form method="post" style="margin-top:1rem;">
             <input type="hidden" name="action" value="login">
             <input type="text" name="username" class="nick-input" placeholder="admin" required>
@@ -33,23 +33,24 @@ if (!($_SESSION['admin_logged'] ?? false)) {
     exit;
 }
 
-// SAVE GAME SETTINGS
 if (!empty($_POST['action']) && $_POST['action'] === 'save_settings' && $pdo) {
     if (csrf_valid()) {
-        $speed     = $_POST['game_speed'] ?? '1.8';
-        $max_split = $_POST['max_split_cells'] ?? '16';
-        $map_size  = $_POST['map_size'] ?? '8000';
-        $remerge   = $_POST['remerge_time_sec'] ?? '10';
-        $rgb_spd   = $_POST['rgb_speed'] ?? '2';
+        $speed       = $_POST['game_speed'] ?? '1.4';
+        $growth_rate = $_POST['growth_rate'] ?? '1.0';
+        $max_split   = $_POST['max_split_cells'] ?? '16';
+        $map_size    = $_POST['map_size'] ?? '8000';
+        $remerge     = $_POST['remerge_time_sec'] ?? '10';
+        $rgb_spd     = $_POST['rgb_speed'] ?? '2';
 
         $stmt = $pdo->prepare("INSERT INTO game_settings (setting_key, setting_value) VALUES (:k, :v) ON DUPLICATE KEY UPDATE setting_value = :v2");
         $stmt->execute([':k' => 'game_speed', ':v' => $speed, ':v2' => $speed]);
+        $stmt->execute([':k' => 'growth_rate', ':v' => $growth_rate, ':v2' => $growth_rate]);
         $stmt->execute([':k' => 'max_split_cells', ':v' => $max_split, ':v2' => $max_split]);
         $stmt->execute([':k' => 'map_size', ':v' => $map_size, ':v2' => $map_size]);
         $stmt->execute([':k' => 'remerge_time_sec', ':v' => $remerge, ':v2' => $remerge]);
         $stmt->execute([':k' => 'rgb_speed', ':v' => $rgb_spd, ':v2' => $rgb_spd]);
 
-        $msg = 'Ayar parametreleri başarıyla güncellendi! Harita boyutu ve hız tüm oyuncularla senkronize edildi.';
+        $msg = 'Büyüme hızı ve motor parametreleri başarıyla kaydedildi!';
     }
 }
 
@@ -64,7 +65,7 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
 </head>
 <body style="padding:2rem; overflow-y:auto;">
     <h2>KRAL AGARİO Admin Kontrol Paneli</h2>
-    <p style="color:var(--text-muted);">Harita Alanı (px), Hız, Bölünme Sınırı ve Oyun Ayarları</p>
+    <p style="color:var(--text-muted);">Büyüme İvmesi, Hız, Harita Boyutu ve Çoklu Oyuncu Parametreleri</p>
 
     <?php if ($msg): ?>
         <div style="padding:1rem; background:var(--bg-card); border:1px solid var(--primary-cyan); margin-bottom:1.5rem;">
@@ -73,21 +74,25 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
     <?php endif; ?>
 
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem;">
-        <!-- GAME PARAMETERS FORM -->
         <div style="background:var(--bg-card); padding:1.5rem; border:1px solid var(--primary-cyan);">
-            <h3>🎮 Oyun Motoru & Harita Ayarları</h3>
+            <h3>🎮 Büyüme & Motor Hassas Ayarları</h3>
             <form method="post" style="margin-top:1rem;">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="save_settings">
 
                 <div style="margin-bottom:1rem;">
-                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Harita Genişliği / Boyutu (Map Size px):</label>
-                    <input type="number" name="map_size" class="nick-input" style="text-align:left;" value="<?= e($settings['map_size']) ?>">
+                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Yem Yeme Büyüme Hızı Çarpanı (Growth Rate Multiplier):</label>
+                    <input type="text" name="growth_rate" class="nick-input" style="text-align:left;" value="<?= e($settings['growth_rate']) ?>">
                 </div>
 
                 <div style="margin-bottom:1rem;">
-                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Oyun İlerleme & İvme Hızı Multiplier (Varsayılan: 1.8):</label>
+                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Hareket & Sürüklenme Hızı Multiplier (Varsayılan: 1.4):</label>
                     <input type="text" name="game_speed" class="nick-input" style="text-align:left;" value="<?= e($settings['game_speed']) ?>">
+                </div>
+
+                <div style="margin-bottom:1rem;">
+                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Harita Genişliği / Boyutu (Map Size px):</label>
+                    <input type="number" name="map_size" class="nick-input" style="text-align:left;" value="<?= e($settings['map_size']) ?>">
                 </div>
 
                 <div style="margin-bottom:1rem;">
@@ -100,16 +105,10 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
                     <input type="number" name="remerge_time_sec" class="nick-input" style="text-align:left;" value="<?= e($settings['remerge_time_sec']) ?>">
                 </div>
 
-                <div style="margin-bottom:1rem;">
-                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">RGB Neon Renk Dönüşüm Hızı (1-5):</label>
-                    <input type="text" name="rgb_speed" class="nick-input" style="text-align:left;" value="<?= e($settings['rgb_speed']) ?>">
-                </div>
-
                 <button type="submit" class="cyber-btn" style="width:100%;">Değişiklikleri Kaydet →</button>
             </form>
         </div>
 
-        <!-- LEADERBOARD TABLE -->
         <div style="background:var(--bg-card); padding:1.5rem; border:1px solid var(--accent-pink);">
             <h3>🏆 Top 10 Yüksek Skorlar</h3>
             <table style="width:100%; border-collapse:collapse; margin-top:1rem;">

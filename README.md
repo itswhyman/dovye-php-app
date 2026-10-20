@@ -1,2 +1,2 @@
-# KRAL AGARİO (DGRWEB Agario Engine v10.0)
-Live Online Multiplayer Agario Arena for friends playing on the same domain.
+# KRAL AGARİO (DGRWEB Master Engine v11.0)
+Single-Server Live Multiplayer Deployment Guide.
