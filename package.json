@@ -1,0 +1,12 @@
+{
+  "name": "kral-agario-server",
+  "version": "10.0.0",
+  "description": "KRAL AGARİO Live Multiplayer Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

@@ -38,20 +38,20 @@ CREATE TABLE IF NOT EXISTS system_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO game_settings (setting_key, setting_value) VALUES
-('game_speed', '1.6'),
+('game_speed', '1.8'),
 ('max_split_cells', '16'),
 ('map_size', '8000'),
 ('remerge_time_sec', '10'),
 ('rgb_speed', '2');
 
 INSERT IGNORE INTO game_leaderboards (player_nick, game_key, high_score) VALUES
-('KRAL_AGARIO_1', 'kralagario', 52400),
-('DGRWEB_MASTER', 'kralagario', 41200),
-('SiberEfsane', 'kralagario', 33100),
-('NeoMatrix', 'kralagario', 25400),
-('CyberNinja', 'kralagario', 19800),
-('AlphaTitan', 'kralagario', 16200),
-('VortexPlayer', 'kralagario', 13900),
-('QuantumBlob', 'kralagario', 11000),
-('ShadowHunter', 'kralagario', 8400),
-('GamerPro007', 'kralagario', 6100);
+('KRAL_AGARIO_1', 'kralagario', 64500),
+('DGRWEB_MASTER', 'kralagario', 51200),
+('SiberEfsane', 'kralagario', 43100),
+('NeoMatrix', 'kralagario', 32400),
+('CyberNinja', 'kralagario', 28800),
+('AlphaTitan', 'kralagario', 22200),
+('VortexPlayer', 'kralagario', 18900),
+('QuantumBlob', 'kralagario', 14000),
+('ShadowHunter', 'kralagario', 11400),
+('GamerPro007', 'kralagario', 8100);

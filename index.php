@@ -9,7 +9,7 @@ $settings = get_game_settings();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>KRAL AGARİO — DGRWEB Agario Arena</title>
+    <title>KRAL AGARİO — Live Online Multiplayer Arena</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="style.css">
@@ -21,7 +21,7 @@ $settings = get_game_settings();
 <!-- ADMIN CONFIG PASSED TO JS -->
 <script>
 window.GAME_CONFIG = {
-    speed: <?= (float)($settings['game_speed'] ?? 1.6) ?>,
+    speed: <?= (float)($settings['game_speed'] ?? 1.8) ?>,
     maxSplitCells: <?= (int)($settings['max_split_cells'] ?? 16) ?>,
     mapSize: <?= (int)($settings['map_size'] ?? 8000) ?>,
     remergeSec: <?= (int)($settings['remerge_time_sec'] ?? 10) ?>,
@@ -33,7 +33,7 @@ window.GAME_CONFIG = {
 <div class="nick-overlay" id="nickOverlay">
     <div class="nick-card">
         <h1 style="font-size:2rem; color:var(--primary-cyan); margin-bottom:0.2rem;">KRAL AGARİO</h1>
-        <p style="color:var(--text-muted); font-size:0.85rem;">DGRWEB Agario Arenasına Katılmak İçin Özelleştirmenizi Yapın:</p>
+        <p style="color:var(--text-muted); font-size:0.85rem;">Arkadaşlarınızla Aynı Haritada Canlı Kapışmak İçin Karakterinizi Seçin:</p>
 
         <input type="text" id="playerNickInput" class="nick-input" placeholder="Oyuncu Nick / Takma Ad" maxlength="15" autofocus value="DGRWEB_Kral">
 
@@ -55,21 +55,7 @@ window.GAME_CONFIG = {
             <div id="avatarPreviewBox" style="margin-top:0.5rem; font-size:0.75rem; color:var(--accent-emerald);">Seçilen Desen Kaplaması Aktif</div>
         </div>
 
-        <button type="button" class="cyber-btn" style="width:100%; font-size:1.1rem;" onclick="startPlatform()">OYUNA BAŞLA (ARENA) →</button>
-    </div>
-</div>
-
-<!-- GAME OVER OVERLAY (YENİDEN DENE) -->
-<div class="gameover-overlay" id="gameOverOverlay">
-    <div class="gameover-card">
-        <h2 style="font-size:2rem; color:var(--accent-pink); margin-bottom:0.5rem;">EYVAH! YUTULDUNUZ!</h2>
-        <p style="color:var(--text-muted); font-size:0.9rem;">Başka bir oyuncu veya çark tarafından yutuldunuz.</p>
-        
-        <div style="margin: 1.5rem 0; background:var(--bg-input); padding:1rem; border:1px solid var(--border-color); font-family:'JetBrains Mono',monospace;">
-            <div>Skorunuz: <strong id="finalScoreText" style="color:var(--primary-cyan); font-size:1.4rem;">0</strong> Pts</div>
-        </div>
-
-        <button type="button" class="cyber-btn" style="width:100%; font-size:1.1rem;" onclick="restartGame()">🔄 YENİDEN DENE →</button>
+        <button type="button" class="cyber-btn" style="width:100%; font-size:1.1rem;" onclick="startPlatform()">CANLI MULTIPLAYER ARENAYA GİRİŞ YAP →</button>
     </div>
 </div>
 
@@ -91,7 +77,7 @@ window.GAME_CONFIG = {
     <!-- GLASSMORPHISM MINIMAP (BOTTOM LEFT) -->
     <div class="glass-minimap">
         <canvas id="miniCanvas" width="210" height="210"></canvas>
-        <div style="position:absolute; top:4px; left:6px; font-size:0.65rem; color:var(--primary-cyan); font-family:'JetBrains Mono',monospace; font-weight:700;">RADAR (8000px)</div>
+        <div id="radarMapText" style="position:absolute; top:4px; left:6px; font-size:0.65rem; color:var(--primary-cyan); font-family:'JetBrains Mono',monospace; font-weight:700;">RADAR (8000px)</div>
     </div>
 
     <!-- LIVE TOP 10 LEADERBOARD (TOP RIGHT) -->
@@ -104,7 +90,7 @@ window.GAME_CONFIG = {
 
     <!-- CONTROLS GUIDE BAR -->
     <div class="controls-guide-bar">
-        <strong>KONTROLLER:</strong> MOUSE (Yön) | W (Yem At) | SPACE (Bölün)
+        <strong>KONTROLLER:</strong> MOUSE (Yön) | W (Yem At) | SPACE (Bölün - Min 30 Skor)
     </div>
 </div>
 

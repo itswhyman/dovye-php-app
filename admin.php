@@ -19,7 +19,7 @@ if (!($_SESSION['admin_logged'] ?? false)) {
     <head><title>Admin Giriş — KRAL AGARİO</title><link rel="stylesheet" href="assets/style.css"></head>
     <body style="display:grid; place-items:center; min-height:100vh;">
     <div class="nick-card">
-        <h2>KRAL AGARİO Admin OS v9.0</h2>
+        <h2>KRAL AGARİO Admin OS v10.0</h2>
         <form method="post" style="margin-top:1rem;">
             <input type="hidden" name="action" value="login">
             <input type="text" name="username" class="nick-input" placeholder="admin" required>
@@ -36,7 +36,7 @@ if (!($_SESSION['admin_logged'] ?? false)) {
 // SAVE GAME SETTINGS
 if (!empty($_POST['action']) && $_POST['action'] === 'save_settings' && $pdo) {
     if (csrf_valid()) {
-        $speed     = $_POST['game_speed'] ?? '1.6';
+        $speed     = $_POST['game_speed'] ?? '1.8';
         $max_split = $_POST['max_split_cells'] ?? '16';
         $map_size  = $_POST['map_size'] ?? '8000';
         $remerge   = $_POST['remerge_time_sec'] ?? '10';
@@ -49,7 +49,7 @@ if (!empty($_POST['action']) && $_POST['action'] === 'save_settings' && $pdo) {
         $stmt->execute([':k' => 'remerge_time_sec', ':v' => $remerge, ':v2' => $remerge]);
         $stmt->execute([':k' => 'rgb_speed', ':v' => $rgb_spd, ':v2' => $rgb_spd]);
 
-        $msg = 'Ayar parametreleri başarıyla güncellendi!';
+        $msg = 'Ayar parametreleri başarıyla güncellendi! Harita boyutu ve hız tüm oyuncularla senkronize edildi.';
     }
 }
 
@@ -64,7 +64,7 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
 </head>
 <body style="padding:2rem; overflow-y:auto;">
     <h2>KRAL AGARİO Admin Kontrol Paneli</h2>
-    <p style="color:var(--text-muted);">Hız, Bölünme Sınırı, Remerge Süresi ve RGB Özelleştirme Ayarları</p>
+    <p style="color:var(--text-muted);">Harita Alanı (px), Hız, Bölünme Sınırı ve Oyun Ayarları</p>
 
     <?php if ($msg): ?>
         <div style="padding:1rem; background:var(--bg-card); border:1px solid var(--primary-cyan); margin-bottom:1.5rem;">
@@ -75,13 +75,18 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem;">
         <!-- GAME PARAMETERS FORM -->
         <div style="background:var(--bg-card); padding:1.5rem; border:1px solid var(--primary-cyan);">
-            <h3>🎮 Oyun Motoru Hassas Ayarları</h3>
+            <h3>🎮 Oyun Motoru & Harita Ayarları</h3>
             <form method="post" style="margin-top:1rem;">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="save_settings">
 
                 <div style="margin-bottom:1rem;">
-                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Oyun İlerleme & İvme Hızı Multiplier (Varsayılan: 1.6):</label>
+                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Harita Genişliği / Boyutu (Map Size px):</label>
+                    <input type="number" name="map_size" class="nick-input" style="text-align:left;" value="<?= e($settings['map_size']) ?>">
+                </div>
+
+                <div style="margin-bottom:1rem;">
+                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Oyun İlerleme & İvme Hızı Multiplier (Varsayılan: 1.8):</label>
                     <input type="text" name="game_speed" class="nick-input" style="text-align:left;" value="<?= e($settings['game_speed']) ?>">
                 </div>
 
@@ -98,11 +103,6 @@ $scores = $pdo ? $pdo->query("SELECT * FROM game_leaderboards ORDER BY high_scor
                 <div style="margin-bottom:1rem;">
                     <label style="display:block; color:var(--text-muted); font-size:0.85rem;">RGB Neon Renk Dönüşüm Hızı (1-5):</label>
                     <input type="text" name="rgb_speed" class="nick-input" style="text-align:left;" value="<?= e($settings['rgb_speed']) ?>">
-                </div>
-
-                <div style="margin-bottom:1rem;">
-                    <label style="display:block; color:var(--text-muted); font-size:0.85rem;">Harita Genişliği (Map Size px):</label>
-                    <input type="number" name="map_size" class="nick-input" style="text-align:left;" value="<?= e($settings['map_size']) ?>">
                 </div>
 
                 <button type="submit" class="cyber-btn" style="width:100%;">Değişiklikleri Kaydet →</button>

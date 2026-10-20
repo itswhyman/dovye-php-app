@@ -1,4 +1,4 @@
-/* KralAgario DGRWEB v9.0 Master Cyber CSS Engine */
+/* KRAL AGARİO DGRWEB v10.0 Enterprise Multiplayer CSS Engine */
 
 :root, [data-theme="dark"] {
   --bg-main: #020612;
@@ -100,29 +100,6 @@ body {
   outline: none;
 }
 
-/* GAME OVER MODAL */
-.gameover-overlay {
-  position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(18, 2, 8, 0.92);
-  backdrop-filter: blur(20px);
-  z-index: 999999;
-  display: none;
-  place-items: center;
-  padding: 1.5rem;
-}
-
-.gameover-card {
-  width: 100%;
-  max-width: 480px;
-  background: var(--bg-surface);
-  border: 2px solid var(--accent-pink);
-  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
-  padding: 2.2rem;
-  box-shadow: 0 0 60px rgba(255, 0, 127, 0.4);
-  text-align: center;
-}
-
 /* FLOATING HEADER */
 .main-header {
   position: fixed;
@@ -207,7 +184,7 @@ body {
   border-bottom: 1px dotted rgba(255, 255, 255, 0.1);
 }
 
-/* CONTROLS GUIDE BAR (ONLY MOUSE, W, SPACE) */
+/* CONTROLS GUIDE BAR */
 .controls-guide-bar {
   position: absolute;
   bottom: 25px;

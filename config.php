@@ -16,7 +16,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_name('kralagario_v9_session');
+    session_name('kralagario_v10_session');
     session_start();
 }
 
@@ -46,7 +46,7 @@ function db(): ?PDO
 
 function get_game_settings(): array {
     $defaults = [
-        'game_speed' => '1.6',
+        'game_speed' => '1.8',
         'max_split_cells' => '16',
         'map_size' => '8000',
         'remerge_time_sec' => '10',

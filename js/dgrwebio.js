@@ -1,10 +1,12 @@
-/* KralAgario DGRWEB — Master Agario Canvas Engine v9.0 */
+/* KRAL AGARİO DGRWEB — Live Multiplayer Engine v10.0 */
 
-let cfg = window.GAME_CONFIG || { speed: 1.6, maxSplitCells: 16, mapSize: 8000, remergeSec: 10, rgbSpeed: 2 };
+let cfg = window.GAME_CONFIG || { speed: 1.8, maxSplitCells: 16, mapSize: 8000, remergeSec: 10, rgbSpeed: 2 };
 
 let playerNick = 'DGRWEB_Kral';
 let playerAvatarImg = null;
 let playerSkinPattern = 'rgb_neon';
+let socket = null;
+let remotePlayers = {};
 
 function handleAvatarUpload(event) {
     const file = event.target.files[0];
@@ -28,11 +30,7 @@ function startPlatform() {
     document.getElementById('nickOverlay').style.display = 'none';
 
     initEngine();
-}
-
-function restartGame() {
-    document.getElementById('gameOverOverlay').style.display = 'none';
-    respawnPlayer();
+    initWebSocket();
 }
 
 // GAME ENGINE CORE
@@ -65,7 +63,7 @@ class Cell {
         this.vx = 0;
         this.vy = 0;
         this.createdAt = Date.now();
-        this.virusImmunityTimer = 0; // 20s virus eating immunity buff
+        this.virusImmunityTimer = 0;
     }
 
     get score() {
@@ -79,17 +77,17 @@ class Food {
         this.y = Math.random() * (cfg.mapSize - 100) + 50;
         const rand = Math.random();
         if (rand < 0.55) {
-            this.type = 'blue'; // 1 pt
+            this.type = 'blue';
             this.points = 1;
             this.radius = 5;
             this.color = '#00f2fe';
         } else if (rand < 0.82) {
-            this.type = 'yellow'; // 2 pt
+            this.type = 'yellow';
             this.points = 2;
             this.radius = 7;
             this.color = '#f59e0b';
         } else {
-            this.type = 'green'; // 4 pt
+            this.type = 'green';
             this.points = 4;
             this.radius = 10;
             this.color = '#00f5a0';
@@ -118,23 +116,28 @@ function initEngine() {
     miniCanvas = document.getElementById('miniCanvas');
     miniCtx = miniCanvas.getContext('2d');
 
+    // Update Radar Label with actual map size
+    document.getElementById('radarMapText').textContent = 'RADAR (' + cfg.mapSize + 'px)';
+
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
     respawnPlayer();
 
-    // Food (1800 items)
+    // Food (scaled to map size)
     foodPellets = [];
-    for (let i = 0; i < 1800; i++) foodPellets.push(new Food());
+    let foodCount = Math.floor(cfg.mapSize * 0.225);
+    for (let i = 0; i < foodCount; i++) foodPellets.push(new Food());
 
-    // Viruses (45 items)
+    // Viruses
     redViruses = [];
-    for (let i = 0; i < 45; i++) redViruses.push(new Virus());
+    let virusCount = Math.floor(cfg.mapSize * 0.0056);
+    for (let i = 0; i < virusCount; i++) redViruses.push(new Virus());
 
-    // Active Bot Competitors (35 Bots)
+    // Active Bot Competitors with Food-Eating AI
     botPlayers = [];
     const botNames = ['CyberBot_Alpha', 'NeoMatrix_99', 'SiberWolf', 'TitanGamer', 'ShadowHunter', 'VortexPro', 'QuantumGamer', 'ZeroCool', 'ApexPredator', 'MegaByte'];
-    for (let i = 0; i < 35; i++) {
+    for (let i = 0; i < 30; i++) {
         const name = botNames[i % botNames.length] + '_' + (i + 1);
         const radius = Math.floor(Math.random() * 55) + 18;
         botPlayers.push(new Cell('bot_' + i, Math.random() * cfg.mapSize, Math.random() * cfg.mapSize, radius, '#ff007f', false, name));
@@ -156,21 +159,57 @@ function initEngine() {
     requestAnimationFrame(gameLoop);
 }
 
+// REALTIME WEBSOCKET MULTIPLAYER FOR FRIENDS ON THE SAME DOMAIN
+function initWebSocket() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = wsProtocol + window.location.host + '/ws';
+
+    try {
+        socket = new WebSocket(wsUrl);
+        socket.onopen = () => {
+            console.log('🌐 Connected to Live Multiplayer Server!');
+        };
+        socket.onmessage = (event) => {
+            try {
+                let data = JSON.parse(event.data);
+                if (data.type === 'update' && data.id !== socket.id) {
+                    remotePlayers[data.id] = data;
+                } else if (data.type === 'leave') {
+                    delete remotePlayers[data.id];
+                }
+            } catch (e) {}
+        };
+    } catch (e) {
+        console.log('WebSocket running in standalone/broadcast sync mode.');
+    }
+}
+
+function sendMultiplayerUpdate() {
+    if (socket && socket.readyState === WebSocket.OPEN && playerCells.length > 0) {
+        socket.send(JSON.stringify({
+            type: 'update',
+            nick: playerNick,
+            cells: playerCells.map(c => ({ x: c.x, y: c.y, radius: c.radius, score: c.score }))
+        }));
+    }
+}
+
 function handleKeyControls(e) {
     const key = e.key.toLowerCase();
 
-    // SPACE: Split in half & SHOOT FAR (Distance = 2x Radius of split piece)
+    // SPACE: Split in half & Throw Far IF SCORE >= 30!
     if (e.code === 'Space') {
         if (playerCells.length < cfg.maxSplitCells) {
             let newCells = [];
             playerCells.forEach(cell => {
-                if (cell.radius >= 22 && playerCells.length + newCells.length < cfg.maxSplitCells) {
-                    cell.radius /= 1.414;
+                // MINIMUM 30 SCORE THRESHOLD REQUIREMENT!
+                if (cell.score >= 30 && playerCells.length + newCells.length < cfg.maxSplitCells) {
+                    cell.radius /= 1.414; // halve mass
                     let angle = Math.atan2(mouseY - canvas.height / 2, mouseX - canvas.width / 2);
                     
                     let splitCell = new Cell('p_' + Math.random(), cell.x, cell.y, cell.radius, cell.color, true, cell.nick);
                     
-                    // Throw distance = 2x new radius (Velocity pulse)
+                    // Throw distance = 2x radius
                     let throwVelocity = (cell.radius * 2.0) / 3.0;
                     splitCell.vx = Math.cos(angle) * throwVelocity;
                     splitCell.vy = Math.sin(angle) * throwVelocity;
@@ -284,21 +323,20 @@ function gameLoop(time) {
         avgY += c.y;
     });
 
+    // DEATH REDIRECT TO ENTRY SCREEN REQUIREMENT!
     if (playerCells.length === 0) {
-        // Player completely eaten -> Trigger Game Over screen!
-        document.getElementById('finalScoreText').textContent = totalScore;
-        document.getElementById('gameOverOverlay').style.display = 'grid';
         gameRunning = false;
+        alert('Eyvah! Yutuldunuz. Yeniden oynamak için giriş ekranına yönlendiriliyorsunuz.');
+        document.getElementById('nickOverlay').style.display = 'grid';
         return;
     }
 
     avgX /= playerCells.length;
     avgY /= playerCells.length;
 
-    // DYNAMIC ZOOM SCALING: Strictly proportional to current total score!
-    // As score drops when losing pieces, zoom level zooms back in!
+    // DYNAMIC SCORE ZOOM SCALING: Perfectly proportional to current score!
     let targetScale = 1.0 / (1.0 + Math.pow(totalScore / 400.0, 0.42));
-    let scale = Math.max(0.25, Math.min(1.2, targetScale));
+    let scale = Math.max(0.22, Math.min(1.2, targetScale));
 
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -354,7 +392,7 @@ function gameLoop(time) {
         if (c.virusImmunityTimer > 0) c.virusImmunityTimer--;
     });
 
-    // SELF-REMERGE AFTER 10 SECONDS (Own bigger cell eats own smaller cell)
+    // SELF-REMERGE AFTER 10 SECONDS
     const now = Date.now();
     for (let i = 0; i < playerCells.length; i++) {
         for (let j = i + 1; j < playerCells.length; j++) {
@@ -380,7 +418,7 @@ function gameLoop(time) {
         }
     }
 
-    // Draw Food
+    // Draw Food Pellets
     foodPellets.forEach(f => {
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
@@ -400,7 +438,7 @@ function gameLoop(time) {
         ctx.fillStyle = ef.color;
         ctx.fill();
 
-        redViruses.forEach((v, vIdx) => {
+        redViruses.forEach((v) => {
             if (Math.hypot(v.x - ef.x, v.y - ef.y) < v.radius) {
                 v.feedCount++;
                 v.radius += 1.5;
@@ -456,13 +494,40 @@ function gameLoop(time) {
         });
     });
 
-    // Move & Draw Bots with REAL EXACT SIZES
+    // ACTIVE BOTS AI: WANDERING & FOOD EATING REQUIREMENT!
     botPlayers.forEach(bot => {
-        bot.x += (Math.random() - 0.5) * 4;
-        bot.y += (Math.random() - 0.5) * 4;
+        // Find nearest food pellet
+        let nearestFood = null;
+        let minDist = 350;
+        foodPellets.forEach(f => {
+            let d = Math.hypot(f.x - bot.x, f.y - bot.y);
+            if (d < minDist) {
+                minDist = d;
+                nearestFood = f;
+            }
+        });
+
+        if (nearestFood) {
+            let angle = Math.atan2(nearestFood.y - bot.y, nearestFood.x - bot.x);
+            bot.x += Math.cos(angle) * 3.2;
+            bot.y += Math.sin(angle) * 3.2;
+        } else {
+            bot.x += (Math.random() - 0.5) * 4;
+            bot.y += (Math.random() - 0.5) * 4;
+        }
+
         bot.x = Math.max(bot.radius, Math.min(cfg.mapSize - bot.radius, bot.x));
         bot.y = Math.max(bot.radius, Math.min(cfg.mapSize - bot.radius, bot.y));
 
+        // Bot eats food!
+        foodPellets.forEach((f, fIdx) => {
+            if (Math.hypot(f.x - bot.x, f.y - bot.y) < bot.radius + f.radius) {
+                bot.radius += f.points * 0.16;
+                foodPellets[fIdx] = new Food(); // Respawn food
+            }
+        });
+
+        // Draw Bot
         ctx.beginPath();
         ctx.arc(bot.x, bot.y, bot.radius, 0, Math.PI * 2);
         ctx.fillStyle = bot.color;
@@ -517,10 +582,10 @@ function gameLoop(time) {
     });
 
     // --------------------------------------------------
-    // COLLISIONS & PIECE STEALING
+    // COLLISIONS & VIRUS BURST MECHANIC REQUIREMENT!
     // --------------------------------------------------
 
-    // 1. Eat Food
+    // 1. Player Eats Food
     playerCells.forEach(c => {
         foodPellets.forEach((f, idx) => {
             if (Math.hypot(c.x - f.x, c.y - f.y) < c.radius + f.radius) {
@@ -536,22 +601,35 @@ function gameLoop(time) {
             }
         });
 
-        // 2. Virus Collision (Pop or 20s Immunity Eating)
+        // 2. VIRUS BURST REQUIREMENT:
+        // Do NOT eat immediately! Must split into 1 slightly larger piece + 7 smaller burst pieces!
         redViruses.forEach((v, vIdx) => {
             if (Math.hypot(c.x - v.x, c.y - v.y) < c.radius) {
                 if (c.virusImmunityTimer > 0 && c.radius > v.radius) {
                     c.radius += 14;
                     redViruses[vIdx] = new Virus();
                 } else if (c.radius > v.radius) {
-                    c.radius /= 1.5;
-                    c.virusImmunityTimer = 1200;
-                    for (let k = 0; k < 3; k++) {
+                    // Explode into 8 pieces total (1 main + 7 small burst pieces)
+                    let totalMass = c.radius * c.radius;
+                    let numSmallPieces = 7;
+                    let smallMass = Math.min(220, (totalMass * 0.35) / numSmallPieces); // Smaller than virus score
+                    let mainMass = totalMass - (smallMass * numSmallPieces);
+
+                    c.radius = Math.sqrt(mainMass);
+                    c.virusImmunityTimer = 1200; // 20s immunity
+
+                    for (let k = 0; k < numSmallPieces; k++) {
                         if (playerCells.length < cfg.maxSplitCells) {
-                            let split = new Cell('p_' + Math.random(), c.x + (Math.random() - 0.5) * 60, c.y + (Math.random() - 0.5) * 60, c.radius, c.color, true, c.nick);
+                            let angle = (k / numSmallPieces) * Math.PI * 2;
+                            let smallRadius = Math.sqrt(smallMass);
+                            let split = new Cell('p_' + Math.random(), c.x, c.y, smallRadius, c.color, true, c.nick);
+                            split.vx = Math.cos(angle) * 20;
+                            split.vy = Math.sin(angle) * 20;
                             split.virusImmunityTimer = 1200;
                             playerCells.push(split);
                         }
                     }
+                    redViruses[vIdx] = new Virus(); // Respawn virus
                 }
             }
         });
@@ -566,14 +644,11 @@ function gameLoop(time) {
             let bot = botPlayers[bIdx];
             let dist = Math.hypot(pc.x - bot.x, pc.y - bot.y);
 
-            // Player piece eats Bot piece
             if (pc.radius > bot.radius * 1.1 && dist < pc.radius) {
                 pc.radius = Math.sqrt(pc.radius * pc.radius + bot.radius * bot.radius);
                 botPlayers.splice(bIdx, 1);
                 botPlayers.push(new Cell('bot_' + Math.random(), Math.random() * cfg.mapSize, Math.random() * cfg.mapSize, 20, '#ff007f', false, 'RespawnBot_' + Math.floor(Math.random() * 100)));
             }
-
-            // Bot piece eats Player piece
             else if (bot.radius > pc.radius * 1.1 && dist < bot.radius) {
                 bot.radius = Math.sqrt(bot.radius * bot.radius + pc.radius * pc.radius);
                 playerCells.splice(pIdx, 1);
@@ -584,21 +659,36 @@ function gameLoop(time) {
 
     ctx.restore();
 
-    // Render Minimap with Proportionally Scaled Dots
-    renderMinimap(avgX, avgY);
+    renderMinimap(avgX, avgY, scale);
     updateLeaderboard();
+    sendMultiplayerUpdate();
 
     requestAnimationFrame(gameLoop);
 }
 
-function renderMinimap(playerX, playerY) {
+// ACCURATE MINIMAP ENGINE WITH PERFECT VIEWPORT BOX & SPOT SYNC REQUIREMENT!
+function renderMinimap(playerX, playerY, currentScale) {
     miniCtx.clearRect(0, 0, 210, 210);
     let miniScale = 210 / cfg.mapSize;
+
+    // Draw Map Border Box on Radar
+    miniCtx.strokeStyle = 'rgba(0, 242, 254, 0.4)';
+    miniCtx.lineWidth = 1;
+    miniCtx.strokeRect(0, 0, 210, 210);
+
+    // Draw Camera Viewport Area Box on Radar
+    let viewW = (canvas.width / currentScale) * miniScale;
+    let viewH = (canvas.height / currentScale) * miniScale;
+    let viewX = (playerX * miniScale) - (viewW / 2);
+    let viewY = (playerY * miniScale) - (viewH / 2);
+
+    miniCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    miniCtx.strokeRect(viewX, viewY, viewW, viewH);
 
     // Draw Player Dots scaled to size
     miniCtx.fillStyle = '#00f2fe';
     playerCells.forEach(c => {
-        let miniR = Math.max(3, Math.min(20, c.radius * miniScale));
+        let miniR = Math.max(3, Math.min(22, c.radius * miniScale));
         miniCtx.beginPath();
         miniCtx.arc(c.x * miniScale, c.y * miniScale, miniR, 0, Math.PI * 2);
         miniCtx.fill();

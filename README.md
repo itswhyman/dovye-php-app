@@ -1,2 +1,2 @@
-# KRAL AGARİO (DGRWEB Agario Engine v9.0)
-Sadece KralAgario oyununa odaklanmış master web portali.
+# KRAL AGARİO (DGRWEB Agario Engine v10.0)
+Live Online Multiplayer Agario Arena for friends playing on the same domain.
